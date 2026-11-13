@@ -1,0 +1,26 @@
+name: tiptap_view
+description: >-
+  Shows TipTap documents (HTML or TipTap JSON) in Flutter through a WebView, with the same schema and
+  extensions as the web editor. Read-only view for now; the editor comes next.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  webview_flutter: ^4.14.1
+  webview_flutter_android: ^4.14.1
+  webview_flutter_wkwebview: ^3.27.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    - assets/default/

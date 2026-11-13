@@ -1,0 +1,54 @@
+<h1>Field guide to the view</h1>
+<p>This document has every kind of content the view handles. It is written by hand to look like what the TipTap editor saves: <strong>bold</strong>, <em>italic</em>, <u>underline</u>, <s>strike</s>, <code>inline code</code>, <span style="color: #dc2626">red text</span>, <span style="font-size: 20px">bigger text</span> and <mark>a highlight</mark>.</p>
+<p style="text-align: center">A centred paragraph.</p>
+
+<h2>Links</h2>
+<p>An <a href="https://tiptap.dev">external link</a>, a <a href="/handbook/onboarding" data-page-id="42">link to another page</a>, a <a href="#faq">link to a heading</a> and <a data-page-id="7">a page link the reader may not open</a> (no href).</p>
+
+<h2>Lists</h2>
+<ul>
+  <li><p>Bullet one</p></li>
+  <li><p>Bullet two</p>
+    <ul><li><p>Nested bullet</p></li></ul>
+  </li>
+</ul>
+<ol>
+  <li><p>First step</p></li>
+  <li><p>Second step</p></li>
+</ol>
+<ul data-type="taskList">
+  <li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked><span></span></label><div><p>Done task</p></div></li>
+  <li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Open task</p></div></li>
+</ul>
+
+<h2>Quote and code</h2>
+<blockquote><p>Simplicity is prerequisite for reliability.</p></blockquote>
+<pre><code class="language-dart">final view = TiptapView(content: TiptapContent.html(html));
+// A long line that has to scroll sideways inside its own box instead of the page: abcdefghijklmnopqrstuvwxyz</code></pre>
+
+<h2>Image</h2>
+<p>Tap the image: the app gets the tap, the view does not open anything.</p>
+<img src="https://picsum.photos/seed/tiptap-view/800/450" alt="A random photo" data-media-id="example-media-1">
+
+<h2>Video</h2>
+<p>Two videos: each shows a preview until tapped, and starting one stops the other.</p>
+<div data-youtube-video><iframe width="640" height="360" allowfullscreen="true" src="https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0"></iframe></div>
+<div data-youtube-video><iframe width="640" height="480" allowfullscreen="true" src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?start=30"></iframe></div>
+
+<h2>Table</h2>
+<p>Wider than the screen, so it scrolls sideways.</p>
+<table>
+  <colgroup><col style="min-width: 140px"><col style="min-width: 140px"><col style="min-width: 140px"><col style="min-width: 140px"></colgroup>
+  <tbody>
+    <tr><th><p>Plan</p></th><th><p>Members</p></th><th><p>Spaces</p></th><th><p>Storage</p></th></tr>
+    <tr><td><p>Free</p></td><td><p>5</p></td><td><p>3</p></td><td><p>1 GB</p></td></tr>
+    <tr><td><p>Team</p></td><td><p>50</p></td><td><p>Unlimited</p></td><td><p>100 GB</p></td></tr>
+  </tbody>
+</table>
+
+<h2 id="faq">Collapsible blocks</h2>
+<details data-type="collapsible"><summary>What happens when I tap this?</summary><div><p>It opens, and the view grows to fit it. Tap again to close.</p></div></details>
+<details data-type="collapsible" open><summary>This one starts open</summary><div><p>The <code>open</code> attribute survives sanitizing.</p></div></details>
+
+<hr>
+<p>The end. Everything below this view is Flutter again.</p>

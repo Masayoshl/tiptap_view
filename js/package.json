@@ -1,0 +1,30 @@
+{
+  "name": "tiptap-view-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "JS runtime of the tiptap_view Flutter package: the bridge and the read-only view mode.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.js",
+    "build:example": "node build.mjs --entry ../example/tiptap/entry.js --out ../example/assets/tiptap",
+    "build:all": "npm run build && npm run build:example"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.31.3",
+    "@tiptap/extension-details": "3.31.3",
+    "@tiptap/extension-image": "3.31.3",
+    "@tiptap/extension-list": "3.31.3",
+    "@tiptap/extension-table": "3.31.3",
+    "@tiptap/extension-text-align": "3.31.3",
+    "@tiptap/extension-text-style": "3.31.3",
+    "@tiptap/extension-youtube": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
+    "dompurify": "3.4.17"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "31.0.0"
+  }
+}

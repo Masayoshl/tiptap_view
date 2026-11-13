@@ -1,0 +1,33 @@
+{
+  "type": "doc",
+  "content": [
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Custom extensions" }] },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "This document is TipTap JSON. It uses two nodes only the example bundle knows: " },
+        { "type": "text", "marks": [{ "type": "code" }], "text": "callout" },
+        { "type": "text", "text": " and " },
+        { "type": "text", "marks": [{ "type": "code" }], "text": "details" },
+        { "type": "text", "text": ". With the default bundle it fails with an error instead." }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": { "tone": "info" },
+      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "An info callout. Tap it: the bundle sends a calloutTap event to Dart." }] }]
+    },
+    {
+      "type": "callout",
+      "attrs": { "tone": "warning" },
+      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "A warning callout." }] }]
+    },
+    {
+      "type": "details",
+      "content": [
+        { "type": "detailsSummary", "content": [{ "type": "text", "text": "Details from @tiptap/extension-details" }] },
+        { "type": "detailsContent", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Hidden until opened." }] }] }
+      ]
+    }
+  ]
+}

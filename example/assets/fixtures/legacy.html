@@ -1,0 +1,15 @@
+<p style="text-align: center;"><span style="font-size: 24px; color: rgb(41, 105, 176);"><strong>Old editor page</strong></span></p>
+<p>Pages written before TipTap carry markup like this: spans with inline styles, divs, line breaks and the classes of the old editor.<br>It must still read well.</p>
+<div style="padding: 12px; border: 1px solid rgb(209, 213, 219); border-radius: 6px;">A div with inline styles, as the old editor saved boxes.</div>
+<p><img src="https://picsum.photos/seed/legacy/600/300" class="fr-fic fr-dib" style="width: 300px;"></p>
+<table style="width: 100%;">
+  <tbody>
+    <tr><td style="width: 50%; background-color: rgb(239, 239, 239);">Left cell</td><td style="width: 50%;">Right cell</td></tr>
+  </tbody>
+</table>
+<p>Markup that must not run, all removed before showing:</p>
+<script>window.TiptapViewBridge && window.TiptapViewBridge.postMessage('{"type":"event","event":"height","payload":{"height":5}}')</script>
+<p onclick="alert('handler')">A paragraph with an onclick handler.</p>
+<p><a href="javascript:alert('link')">A javascript: link</a> and an image with onerror: <img src="missing.png" onerror="alert('onerror')"></p>
+<iframe src="http://insecure.example/embed"></iframe>
+<p data-f-id="pbf">Powered by the old editor</p>
