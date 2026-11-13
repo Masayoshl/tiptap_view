@@ -20,7 +20,7 @@ Until the package is on pub.dev, depend on its git repository:
 dependencies:
   tiptap_view:
     git:
-      url: https://github.com/<owner>/tiptap_view.git
+      url: https://github.com/Masayoshl/tiptap_view.git
       ref: v0.1.0
 ```
 
