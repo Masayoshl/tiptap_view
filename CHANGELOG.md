@@ -32,6 +32,11 @@ Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol i
   added its paragraph (normalizing plugins now run when the document opens, outside undo); TipTap's
   Details node view had no styles in the editor.
 * The example has an editor screen (`example/lib/editor_page.dart`).
+* Keyboard (roadmap 4.5): the editor keeps the caret in sight by scrolling the page around it
+  (`TiptapEditor.keepCaretVisible`, `caretPadding`), from the runtime's `caret` event and while the
+  keyboard comes up; the page inside the WebView no longer scrolls by itself when iOS focuses it.
+* Android: selection handles no longer stay behind over the keyboard when the page around the editor
+  scrolls (the runtime's `hideSelectionHandles`, sent on the first scroll while focused).
 * `createRuntime({ editorExtensions, normalizeContent, validateForSave })` for the editor mode.
 * `TiptapRuntimeController`: the base of both controllers (conversions, `call`).
 * `build.mjs` resolves TipTap and ProseMirror to the runtime's copy, so an app's extensions from its own

@@ -23,8 +23,8 @@ What comes after 0.1.0, roughly in order. Each stage keeps the boundaries the pa
 
 ## 2. Finish the view
 
-- [ ] Run the example on Android: layout, link and image taps, YouTube inline and fullscreen
-      (`setCustomWidgetCallbacks`), the keep-alive in lists.
+- [x] Run the example on Android: layout, link and image taps, YouTube inline and fullscreen
+      (`setCustomWidgetCallbacks`). The keep-alive in lists is still to check.
 - [ ] Very long documents: memory and first paint of a WebView several screens tall, on both platforms.
       If it hurts, render in slices or let the view scroll itself with the page's header passed in.
 - [ ] In-page anchors (`#section`): report the target's offset so the app can scroll its page to it.
@@ -176,12 +176,23 @@ only for what starts in the page (a paste, a tap).
 
 ### 4.5 Layout and keyboard
 
-- [ ] Two layouts: the editor grows with its content inside the app's scrollable (like the view) and
-      reports the caret's rect so the app can keep it above the keyboard; or it has a fixed height and
-      scrolls itself. Measure both on real devices and pick the default.
-- [ ] iOS: focus from Dart, scrolling to the caret, the input accessory bar (hide it or replace it with
-      the Flutter toolbar). If `webview_flutter` cannot do this, a second adapter.
-- [ ] Android: IME composition (Gboard, CJK input), selection handles inside the Flutter page.
+- [x] The editor grows with its content inside the app's scrollable, like the view. The runtime reports
+      the caret (`caret` event, in the view's coordinates) while the editor has focus, and the editor
+      scrolls the page around it to keep the caret in sight (`keepCaretVisible`, `caretPadding`): when
+      the caret moves, and while the keyboard grows. Only a growing inset counts, since iOS also reports
+      metrics while the page scrolls under a focused field. Checked on the iOS simulator with the
+      on-screen keyboard.
+- [x] The page in the WebView never scrolls by itself: iOS scrolled it on focus, which hid the top of
+      the document out of reach of any drag. Any page scroll is undone at once.
+- [ ] A fixed-height layout that scrolls itself, for apps that want the editor as a pane; measure it
+      against the growing one on real devices.
+- [ ] iOS: the input accessory bar above the keyboard (arrows, Done) takes ~50pt and duplicates the app's
+      toolbar: hide it or replace it with the Flutter toolbar. `webview_flutter` has no API for it, so
+      this likely needs native code (a second adapter or a small plugin).
+- [x] Android: Gboard composition works. Selection handles are drawn by the WebView in a window of their
+      own at a fixed place on screen and stayed behind, over the keyboard, when the page scrolled; the
+      editor now drops them on the first scroll of the page while it has focus.
+- [ ] CJK input on Android and iOS.
 - [ ] Undo and redo from the keyboard shortcuts and from the toolbar stay in one history.
 
 ### 4.6 Toolbar building blocks
@@ -196,8 +207,10 @@ only for what starts in the page (a paste, a tap).
 - [x] The example gets an editor screen: edit, save to JSON and HTML, open the saved document in
       `TiptapView`, the same bundle in both. Run on the iOS simulator (iPhone 17 Pro, iOS 26.2): typing,
       selection and the toolbar state, uploads with failure and Retry, embeds, Save into the view.
-- [ ] The same run on Android, and on a real iPhone with the on-screen keyboard (the simulator had a
-      hardware keyboard; text was pasted, not typed through the IME).
+- [x] The same run on Android (Pixel 9 emulator, Gboard): view taps, YouTube inline and fullscreen and
+      Back out of it, typing with Gboard composition, toolbar, uploads with failure and Retry, Save into
+      the view, the caret above the keyboard. The iOS simulator with its on-screen keyboard too.
+- [ ] A real iPhone and a real Android phone.
 - [ ] JS tests of the editor mode on jsdom; Dart tests of the controller with the fake session, as for
       the view.
 

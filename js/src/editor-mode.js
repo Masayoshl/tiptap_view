@@ -61,6 +61,13 @@ export function createEditorMode(core, { editorExtensions = [], normalizeContent
     }
   }
 
+  // The page is as tall as the document and the Flutter page around it scrolls; the page itself never
+  // does. iOS scrolls a WebView on its own when the keyboard comes up, which here only hides the top of
+  // the document, out of reach of any drag. So any scroll of the page is undone at once.
+  window.addEventListener('scroll', () => {
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  }, { passive: true });
+
   let editor = null;
   let version = 0;
   let changeTimer = null;
@@ -123,6 +130,27 @@ export function createEditorMode(core, { editorExtensions = [], normalizeContent
     };
   }
 
+  // Where the caret is, in the view's coordinates (the page never scrolls), so Dart can keep it above the
+  // keyboard by scrolling the page around the view. Sent while the editor has focus, once per change.
+  let lastCaret = '';
+  let caretFrame = 0;
+  function caretChanged() {
+    if (caretFrame) return;
+    caretFrame = requestAnimationFrame(() => {
+      caretFrame = 0;
+      if (!editor) return;
+      let caret = { focused: false };
+      if (editor.isFocused) {
+        const coords = editor.view.coordsAtPos(editor.state.selection.head);
+        caret = { focused: true, top: coords.top, bottom: coords.bottom, left: coords.left };
+      }
+      const text = JSON.stringify(caret);
+      if (text === lastCaret) return;
+      lastCaret = text;
+      emit('caret', caret);
+    });
+  }
+
   function stateChanged() {
     clearTimeout(stateTimer);
     stateTimer = setTimeout(() => {
@@ -141,15 +169,25 @@ export function createEditorMode(core, { editorExtensions = [], normalizeContent
     content.replaceChildren();
     version = 0;
     lastState = '';
+    lastCaret = '';
     editor = new Editor({
       element: content,
       extensions: [...all, TableScroll, uploads.extension, PasteImages],
       content: doc,
       editable,
       onUpdate: changed,
-      onTransaction: stateChanged,
-      onFocus: stateChanged,
-      onBlur: stateChanged,
+      onTransaction: () => {
+        stateChanged();
+        caretChanged();
+      },
+      onFocus: () => {
+        stateChanged();
+        caretChanged();
+      },
+      onBlur: () => {
+        stateChanged();
+        caretChanged();
+      },
     });
     // Plugins that normalize the document on a transaction (StarterKit's TrailingNode adds an empty
     // paragraph after a last block that is not one) would otherwise do it on the user's first tap, and an
@@ -386,6 +424,19 @@ export function createEditorMode(core, { editorExtensions = [], normalizeContent
       },
       cancelUpload({ id }) {
         uploads.remove(current(), String(id));
+      },
+      /**
+       * Hides the platform's selection handles, keeping the selection: Android draws them in a window of
+       * their own at a fixed place on screen, which stays put when the Flutter page scrolls the view away.
+       * Setting the same selection again from script makes the browser drop them.
+       */
+      hideSelectionHandles() {
+        const selection = window.getSelection();
+        if (!editor || !editor.isFocused || !selection || !selection.rangeCount) return false;
+        const range = selection.getRangeAt(0);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return true;
       },
       setImagePaste({ enabled }) {
         imagePaste = Boolean(enabled);

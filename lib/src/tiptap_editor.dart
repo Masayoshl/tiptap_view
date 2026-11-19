@@ -49,6 +49,8 @@ class TiptapEditor extends StatefulWidget {
     this.loadingBuilder,
     this.minHeight = 1,
     this.gestureRecognizers,
+    this.keepCaretVisible = true,
+    this.caretPadding = 24,
   });
 
   final TiptapContent content;
@@ -104,13 +106,93 @@ class TiptapEditor extends StatefulWidget {
   /// Gestures the WebView takes from the page around it; by default, horizontal drags.
   final Set<Factory<OneSequenceGestureRecognizer>>? gestureRecognizers;
 
+  /// Scrolls the page around the editor so the caret stays in sight: when it moves, and while the keyboard
+  /// comes up. The editor grows to its content, so only the page around it can scroll; this is how it
+  /// keeps the caret above the keyboard.
+  final bool keepCaretVisible;
+
+  /// Room kept above and below the caret when the page scrolls to it, in logical pixels.
+  final double caretPadding;
+
   @override
   State<TiptapEditor> createState() => _TiptapEditorState();
 }
 
-class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapEditor> {
+class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapEditor>, WidgetsBindingObserver {
   bool _opened = false;
   TiptapContent? _shownContent;
+
+  /// The caret in the editor's own coordinates while it has focus; null without focus.
+  Rect? _caret;
+  bool _revealScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollPosition?.removeListener(_pageScrolled);
+    _handlesTimer?.cancel();
+    super.dispose();
+  }
+
+  // Android draws selection handles in a window of their own, at a fixed place on screen; when the page
+  // around the editor scrolls, they stay behind over whatever comes there. So the first scroll after a
+  // pause asks the page to drop them (the selection itself stays).
+  ScrollPosition? _scrollPosition;
+  Timer? _handlesTimer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (position == _scrollPosition) return;
+    _scrollPosition?.removeListener(_pageScrolled);
+    _scrollPosition = position?..addListener(_pageScrolled);
+  }
+
+  void _pageScrolled() {
+    if (_caret == null || defaultTargetPlatform != TargetPlatform.android) return;
+    final quiet = _handlesTimer == null || !_handlesTimer!.isActive;
+    _handlesTimer?.cancel();
+    _handlesTimer = Timer(const Duration(milliseconds: 300), () {});
+    if (quiet && pageReadyInfo != null) unawaited(sendToPage('hideSelectionHandles', const {}));
+  }
+
+  double _bottomInset = 0;
+
+  // The keyboard coming up changes the metrics every frame of its animation; the page around the editor
+  // shrinks with it, and the caret has to follow. Only a growing inset counts: iOS also reports metrics
+  // while the page scrolls under a focused field, and following those would pin the page to the caret.
+  @override
+  void didChangeMetrics() {
+    final inset = View.of(context).viewInsets.bottom;
+    final grew = inset > _bottomInset;
+    _bottomInset = inset;
+    if (grew) _revealCaret(animate: false);
+  }
+
+  void _revealCaret({bool animate = true}) {
+    if (!widget.keepCaretVisible || _caret == null || _revealScheduled) return;
+    _revealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _revealScheduled = false;
+      final caret = _caret;
+      final box = context.findRenderObject();
+      if (!mounted || caret == null || box is! RenderBox || !box.attached) return;
+      box.showOnScreen(
+        rect: Rect.fromLTRB(caret.left, caret.top - widget.caretPadding, caret.right, caret.bottom + widget.caretPadding),
+        duration: animate ? const Duration(milliseconds: 150) : Duration.zero,
+        curve: Curves.easeOut,
+      );
+    });
+    // A caret that moved inside the page changes nothing in Flutter, so no frame would come by itself.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   @override
   String get pageMode => 'editor';
@@ -154,6 +236,7 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   @override
   void pageDetached() {
     widget.controller?.detach();
+    _caret = null;
     _opened = false;
     _shownContent = null;
   }
@@ -174,6 +257,15 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
         return true;
       case 'linkTap':
         widget.onLinkTap?.call(TiptapLinkTap.fromPayload(payload, baseUri: pageBaseUrl));
+        return true;
+      case 'caret':
+        if (payload['focused'] != true) {
+          _caret = null;
+          return true;
+        }
+        double value(String key) => (payload[key] as num?)?.toDouble() ?? 0;
+        _caret = Rect.fromLTRB(value('left'), value('top'), value('left') + 1, value('bottom'));
+        _revealCaret();
         return true;
     }
     return false;

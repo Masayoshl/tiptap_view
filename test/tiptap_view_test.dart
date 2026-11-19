@@ -621,6 +621,113 @@ void main() {
       expect(taps.single.uri, Uri.parse('https://tiptap-view.local/docs'));
     });
 
+    testWidgets('scrolls the page around it to keep the caret in sight', (tester) async {
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: ListView(controller: scroll, children: [
+              const SizedBox(height: 200),
+              TiptapEditor(adapter: adapter, bundle: bundle(), content: const TiptapContent.html('')),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final session = adapter.session!;
+      session.respond = (method, _) => method == 'setContent' ? {'status': 'ok'} : null;
+      session.ready(mode: 'editor');
+      session.event('height', {'height': 3000});
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+
+      // The caret 2000px down the document: 2200px down the page, far below the 600px screen.
+      session.event('caret', {'focused': true, 'top': 2000, 'left': 40, 'bottom': 2020});
+      await tester.pumpAndSettle();
+      final caretOnScreen = 200 + 2000 - scroll.offset;
+      expect(caretOnScreen, inInclusiveRange(0, 600 - 20), reason: 'the caret is on screen');
+
+      // Without focus nothing moves.
+      final offset = scroll.offset;
+      session.event('caret', {'focused': false});
+      tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, offset);
+    });
+
+    testWidgets('follows the keyboard coming up over the caret', (tester) async {
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: ListView(controller: scroll, children: [
+              TiptapEditor(adapter: adapter, bundle: bundle(), content: const TiptapContent.html('')),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final session = adapter.session!;
+      session.respond = (method, _) => method == 'setContent' ? {'status': 'ok'} : null;
+      session.ready(mode: 'editor');
+      session.event('height', {'height': 1000});
+      // On screen before the keyboard: 500px down a 600px screen.
+      session.event('caret', {'focused': true, 'top': 500, 'left': 40, 'bottom': 520});
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+
+      // A 300px keyboard (insets are physical pixels; the test view's ratio is 3): the Scaffold's body
+      // shrinks to 300px and the caret has to move up into it.
+      tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      final caretOnScreen = 500 - scroll.offset;
+      expect(caretOnScreen, inInclusiveRange(0, 300 - 20), reason: 'the caret is above the keyboard');
+    });
+
+    testWidgets('on Android, a scroll of the page drops the selection handles once, while focused', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: ListView(controller: scroll, children: [
+              TiptapEditor(adapter: adapter, bundle: bundle(), content: const TiptapContent.html('')),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final session = adapter.session!;
+      session.respond = (method, _) => method == 'setContent' ? {'status': 'ok'} : true;
+      session.ready(mode: 'editor');
+      session.event('height', {'height': 3000});
+      await tester.pumpAndSettle();
+      int drops() => session.methods.where((method) => method == 'hideSelectionHandles').length;
+
+      scroll.jumpTo(100);
+      expect(drops(), 0, reason: 'nothing to drop without focus');
+
+      session.event('caret', {'focused': true, 'top': 300, 'left': 10, 'bottom': 320});
+      await tester.pumpAndSettle();
+      scroll.jumpTo(150);
+      scroll.jumpTo(200);
+      scroll.jumpTo(250);
+      expect(drops(), 1, reason: 'once for a run of scroll updates');
+      await tester.pump(const Duration(milliseconds: 400));
+      scroll.jumpTo(300);
+      expect(drops(), 2, reason: 'again after a pause');
+      debugDefaultTargetPlatformOverride = null;
+    });
+
     testWidgets('reports changes, reads the document and follows editable', (tester) async {
       final changes = <int>[];
       final controller = TiptapEditorController();

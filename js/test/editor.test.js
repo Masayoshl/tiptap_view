@@ -366,3 +366,42 @@ test('an untouched document is not edited: normalizing plugins run when it opens
   assert.equal(runtime.editor.can().undo(), false);
   assert.equal(events('change').length, before);
 });
+
+test('reports where the caret is while the editor has focus, once per change', async () => {
+  await call('setContent', { format: 'json', content: doc(paragraph('Hello'), paragraph('World')) });
+  const caretEvents = () => events('caret');
+  const before = caretEvents().length;
+  runtime.editor.commands.focus(3);
+  // jsdom has no focus tracking of its own for contenteditable; TipTap's own focus events drive this.
+  runtime.editor.emit('focus', { editor: runtime.editor, event: new window.FocusEvent('focus'), transaction: runtime.editor.state.tr });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const shown = caretEvents().slice(before);
+  assert.ok(shown.length >= 1);
+  const caret = shown.at(-1).payload;
+  assert.equal(typeof caret.top, 'number');
+  assert.equal(typeof caret.bottom, 'number');
+  assert.equal(typeof caret.left, 'number');
+
+  const count = caretEvents().length;
+  runtime.editor.commands.setTextSelection(3);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(caretEvents().length, count, 'the same caret is not sent twice');
+});
+
+test('the page scrolls back to the top at once: only the page around the view scrolls', async () => {
+  let scrolledTo = null;
+  const scrollTo = window.scrollTo;
+  window.scrollTo = (x, y) => { scrolledTo = [x, y]; };
+  Object.defineProperty(window, 'scrollY', { value: 110, configurable: true });
+  window.dispatchEvent(new window.Event('scroll'));
+  assert.deepEqual(scrolledTo, [0, 0]);
+  Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+  window.scrollTo = scrollTo;
+});
+
+test('drops the selection handles by setting the same selection again, only while focused', async () => {
+  await call('setContent', { format: 'json', content: doc(paragraph('Hello')) });
+  runtime.editor.commands.blur();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  if (!runtime.editor.isFocused) assert.equal(await call('hideSelectionHandles'), false);
+});
