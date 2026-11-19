@@ -1,6 +1,7 @@
-## Unreleased
+## 0.2.0
 
-Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol is now 2.
+The editor: `TiptapEditor` next to `TiptapView`, on the same bundle. Bundles must be rebuilt: the protocol
+is now 2, and a 0.1.0 bundle is refused.
 
 * The runtime is a core plus a mode; the host page says which mode starts, and `ready` reports it. The view
   refuses a bundle that cannot start in its mode.

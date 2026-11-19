@@ -1,9 +1,9 @@
 {
   "name": "tiptap-view-runtime",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "JS runtime of the tiptap_view Flutter package: the bridge and the read-only view mode.",
+  "description": "JS runtime of the tiptap_view Flutter package: the bridge, the view mode and the editor mode.",
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.js",

@@ -15,7 +15,7 @@ What comes after 0.1.0, roughly in order. Each stage keeps the boundaries the pa
       tiptap_view:
         git:
           url: https://github.com/<owner>/tiptap_view.git
-          ref: v0.1.0
+          ref: v0.2.0
       ```
 - [ ] `homepage` / `repository` in `pubspec.yaml`; drop `publish_to: none` when publishing to pub.dev.
 - [ ] CI: `flutter test`, `npm test` in `js/`, `flutter analyze`, and a check that the committed bundles in

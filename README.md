@@ -49,7 +49,7 @@ dependencies:
   tiptap_view:
     git:
       url: https://github.com/Masayoshl/tiptap_view.git
-      ref: v0.1.0
+      ref: v0.2.0
 ```
 
 ## How it fits together
