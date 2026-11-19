@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -39,7 +40,10 @@ class TiptapEditor extends StatefulWidget {
     this.onReady,
     this.onOpened,
     this.onChange,
+    this.onStateChange,
     this.onIncompatibleContent,
+    this.onImageUpload,
+    this.onLinkTap,
     this.onEvent,
     this.onError,
     this.loadingBuilder,
@@ -72,8 +76,20 @@ class TiptapEditor extends StatefulWidget {
   final VoidCallback? onOpened;
   final ValueChanged<TiptapEditorChange>? onChange;
 
+  /// The toolbar state changed (see [TiptapEditorState]); [TiptapEditorController.state] has it too.
+  final ValueChanged<TiptapEditorState>? onStateChange;
+
   /// [content] could not be opened for editing. Without this callback it is reported to [onError].
   final ValueChanged<TiptapIncompatibleContent>? onIncompatibleContent;
+
+  /// Uploads an image file pasted into the editor (a screenshot, a photo copied elsewhere). Without it, the
+  /// editor does not take pasted files. Images the app picks itself go through
+  /// [TiptapEditorController.uploadImage].
+  final Future<TiptapUploadedImage> Function(TiptapImageFile file)? onImageUpload;
+
+  /// A tap on a link in the document. The editor never follows links; a bubble with the link and an Edit
+  /// action is the app's.
+  final ValueChanged<TiptapLinkTap>? onLinkTap;
 
   /// Every event from the runtime, the ones with their own callbacks too.
   final ValueChanged<TiptapEvent>? onEvent;
@@ -116,8 +132,23 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   @override
   void pageReady(TiptapReadyInfo info) {
     widget.controller?.attach(callPage);
+    unawaited(sendToPage('setImagePaste', {'enabled': widget.onImageUpload != null}));
     widget.onReady?.call(info);
     _syncContent();
+  }
+
+  @override
+  TiptapRequestHandler? pageRequestHandler(String name) {
+    final upload = widget.onImageUpload;
+    if (name != 'imageUpload' || upload == null) return null;
+    return (payload) async {
+      final image = await upload(TiptapImageFile(
+        bytes: base64Decode('${payload['data'] ?? ''}'),
+        mimeType: '${payload['type'] ?? ''}',
+        name: '${payload['name'] ?? ''}',
+      ));
+      return image.toParams();
+    };
   }
 
   @override
@@ -129,9 +160,23 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
 
   @override
   bool pageEvent(String name, Map<String, Object?> payload) {
-    if (name != 'change') return false;
-    widget.onChange?.call(TiptapEditorChange((payload['version'] as num?)?.toInt() ?? 0));
-    return true;
+    switch (name) {
+      case 'change':
+        widget.onChange?.call(TiptapEditorChange((payload['version'] as num?)?.toInt() ?? 0));
+        return true;
+      case 'state':
+        final state = TiptapEditorState.fromPayload(payload);
+        widget.controller?.updateState(state);
+        widget.onStateChange?.call(state);
+        return true;
+      case 'uploadRetry' || 'uploadCancel':
+        widget.controller?.handleUploadEvent(name, payload);
+        return true;
+      case 'linkTap':
+        widget.onLinkTap?.call(TiptapLinkTap.fromPayload(payload, baseUri: pageBaseUrl));
+        return true;
+    }
+    return false;
   }
 
   @override
@@ -146,6 +191,9 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
       return;
     }
     syncPageTheme();
+    if ((oldWidget.onImageUpload == null) != (widget.onImageUpload == null) && pageReadyInfo != null) {
+      unawaited(sendToPage('setImagePaste', {'enabled': widget.onImageUpload != null}));
+    }
     if (widget.content != _shownContent) {
       _syncContent();
     } else if (oldWidget.editable != widget.editable && _opened) {

@@ -270,3 +270,180 @@ class TiptapIncompatibleContent {
       'TiptapIncompatibleContent(${reason.name}, types: $types, attributes: $attributes, '
       'document: $documentVersion, bundle: $bundleVersion)';
 }
+
+/// A node around the selection in a `TiptapEditor`: its type and attributes.
+@immutable
+class TiptapNodeState {
+  const TiptapNodeState(this.type, this.attrs);
+
+  final String type;
+  final Map<String, Object?> attrs;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TiptapNodeState && other.type == type && mapEquals(other.attrs, attrs);
+
+  @override
+  int get hashCode => Object.hash(type, Object.hashAllUnordered(attrs.entries.map((e) => Object.hash(e.key, e.value))));
+
+  @override
+  String toString() => 'TiptapNodeState($type, $attrs)';
+}
+
+/// What a toolbar needs from a `TiptapEditor`, sent after every change of the document, the selection or
+/// the focus. Built from the schema's names, so an app's own nodes and marks are in it like TipTap's.
+@immutable
+class TiptapEditorState {
+  const TiptapEditorState({
+    this.version = 0,
+    this.editable = false,
+    this.focused = false,
+    this.marks = const {},
+    this.nodes = const [],
+    this.canUndo = false,
+    this.canRedo = false,
+    this.selectionEmpty = true,
+    this.selectionFrom = 0,
+    this.selectionTo = 0,
+    this.selectedNode,
+  });
+
+  factory TiptapEditorState.fromPayload(Map<String, Object?> payload) {
+    final selection = payload['selection'] is Map ? Map<String, Object?>.from(payload['selection'] as Map) : const {};
+    final marks = payload['marks'] is Map ? payload['marks'] as Map : const {};
+    return TiptapEditorState(
+      version: (payload['version'] as num?)?.toInt() ?? 0,
+      editable: payload['editable'] == true,
+      focused: payload['focused'] == true,
+      marks: {
+        for (final entry in marks.entries)
+          '${entry.key}': Map<String, Object?>.unmodifiable(entry.value is Map ? entry.value as Map : const {}),
+      },
+      nodes: [
+        for (final node in (payload['nodes'] as List?) ?? const [])
+          if (node is Map)
+            TiptapNodeState('${node['type']}', Map<String, Object?>.unmodifiable(node['attrs'] is Map ? node['attrs'] as Map : const {})),
+      ],
+      canUndo: payload['canUndo'] == true,
+      canRedo: payload['canRedo'] == true,
+      selectionEmpty: selection['empty'] != false,
+      selectionFrom: (selection['from'] as num?)?.toInt() ?? 0,
+      selectionTo: (selection['to'] as num?)?.toInt() ?? 0,
+      selectedNode: selection['node'] as String?,
+    );
+  }
+
+  /// The edit count (see [TiptapEditorChange.version]).
+  final int version;
+  final bool editable;
+  final bool focused;
+
+  /// Active marks at the selection, with their attributes: `{'bold': {}, 'link': {'href': …}}`.
+  final Map<String, Map<String, Object?>> marks;
+
+  /// The nodes around the selection, outermost first: `bulletList`, `listItem`, `paragraph`.
+  final List<TiptapNodeState> nodes;
+
+  final bool canUndo;
+  final bool canRedo;
+  final bool selectionEmpty;
+  final int selectionFrom;
+  final int selectionTo;
+
+  /// The type of a selected node (an image, a video) rather than text; null for a text selection.
+  final String? selectedNode;
+
+  /// The innermost node around the selection: the block type (`paragraph`, `heading`…).
+  TiptapNodeState? get block => nodes.isEmpty ? null : nodes.last;
+
+  /// Whether a mark or a node around the selection is [name], with at least [attrs]:
+  /// `isActive('bold')`, `isActive('heading', {'level': 2})`, `isActive('paragraph', {'textAlign': 'center'})`.
+  bool isActive(String name, [Map<String, Object?> attrs = const {}]) {
+    bool matches(Map<String, Object?> actual) => attrs.entries.every((entry) => actual[entry.key] == entry.value);
+    final mark = marks[name];
+    if (mark != null) return matches(mark);
+    return nodes.any((node) => node.type == name && matches(node.attrs)) || (selectedNode == name && attrs.isEmpty);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TiptapEditorState &&
+      other.version == version &&
+      other.editable == editable &&
+      other.focused == focused &&
+      mapEquals(other.marks.map((k, v) => MapEntry(k, v.toString())), marks.map((k, v) => MapEntry(k, v.toString()))) &&
+      listEquals(other.nodes, nodes) &&
+      other.canUndo == canUndo &&
+      other.canRedo == canRedo &&
+      other.selectionEmpty == selectionEmpty &&
+      other.selectionFrom == selectionFrom &&
+      other.selectionTo == selectionTo &&
+      other.selectedNode == selectedNode;
+
+  @override
+  int get hashCode => Object.hash(version, editable, focused, marks.length, nodes.length, canUndo, canRedo, selectionFrom, selectionTo, selectedNode);
+
+  @override
+  String toString() => 'TiptapEditorState(marks: ${marks.keys.toList()}, block: ${block?.type}, undo: $canUndo, redo: $canRedo)';
+}
+
+/// An image the app has uploaded, for a `TiptapEditor` to put in the document.
+@immutable
+class TiptapUploadedImage {
+  const TiptapUploadedImage(this.src, {this.attributes = const {}, this.node = 'image'});
+
+  /// The image's URL, where it will be loaded from.
+  final String src;
+
+  /// More attributes of the image node, such as a media id. Ones the node does not declare are left out
+  /// and reported, since TipTap would drop them silently.
+  final Map<String, Object?> attributes;
+
+  /// The image node type of the bundle's schema: `image`, or an app's own (`blockImage`).
+  final String node;
+
+  Map<String, Object?> toParams() => {'src': src, 'attributes': attributes, 'node': node};
+}
+
+/// An image file pasted into a `TiptapEditor`, for the app to upload.
+@immutable
+class TiptapImageFile {
+  const TiptapImageFile({required this.bytes, required this.mimeType, this.name = ''});
+
+  final Uint8List bytes;
+  final String mimeType;
+
+  /// The file name the clipboard gave, often empty.
+  final String name;
+
+  @override
+  String toString() => 'TiptapImageFile($mimeType, ${bytes.length} bytes, $name)';
+}
+
+/// The link at the selection of a `TiptapEditor`, as `TiptapEditorController.getLink` reads it.
+@immutable
+class TiptapLink {
+  const TiptapLink({required this.active, this.href, this.attributes = const {}, this.text = '', this.selectionEmpty = true});
+
+  factory TiptapLink.fromPayload(Map<String, Object?> payload) => TiptapLink(
+        active: payload['active'] == true,
+        href: payload['href'] as String?,
+        attributes: Map<String, Object?>.unmodifiable(payload['attributes'] is Map ? payload['attributes'] as Map : const {}),
+        text: '${payload['text'] ?? ''}',
+        selectionEmpty: payload['empty'] != false,
+      );
+
+  /// Whether the selection is inside a link; when it is not, [text] is the selected text.
+  final bool active;
+  final String? href;
+
+  /// The link's other attributes (`target`, `rel`, `title`, an app's own).
+  final Map<String, Object?> attributes;
+
+  /// The link's text, or the selected text when there is no link.
+  final String text;
+  final bool selectionEmpty;
+
+  @override
+  String toString() => 'TiptapLink(active: $active, $href, "$text")';
+}

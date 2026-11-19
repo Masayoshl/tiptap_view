@@ -14,6 +14,24 @@ Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol i
   `onChange` reports edits after a pause. JSON the schema cannot hold (unknown node or mark types,
   undeclared attributes, a newer `TiptapContent.json(schemaVersion:)`) is refused with
   `TiptapIncompatibleContent` instead of being opened empty or saved without it.
+* Commands by name: `TiptapEditorController.command('toggleHeading', {'level': 2})`, `commandWith`,
+  `canRun`, `commands()`; any extension's command, the app's own too.
+* Toolbar state: the editor sends a `state` event after each transaction (active marks with attributes, the
+  nodes around the selection, undo / redo, the selection, focus). `TiptapEditorState.isActive('heading',
+  {'level': 2})`; `TiptapEditorController.state` is a `ValueListenable`, `onStateChange` a callback.
+* Wide tables scroll sideways in the editor too (a fallback table node view).
+* Image uploads (roadmap 4.4): `TiptapEditorController.uploadImage(upload, preview:)` with a placeholder
+  outside the document, Retry and Remove on failure, and `TiptapUploadedImage(src, attributes:, node:)`;
+  pasted image files go to `TiptapEditor.onImageUpload`. `getContent().errors` counts pending and failed
+  uploads.
+* Links: `getLink()`, `setLink(href, attributes:, text:)` (undeclared attributes refused), `removeLink()`;
+  `TiptapEditor.onLinkTap`.
+* Embeds: `insertEmbed(url)` through `createRuntime({ embeds })`; `defaultEmbeds()` knows YouTube.
+* Found on the iOS simulator and fixed: embedded frames in the editor kept YouTube's fixed 480px height
+  (now full width, 16:9); a document counted as edited on the first tap, when StarterKit's TrailingNode
+  added its paragraph (normalizing plugins now run when the document opens, outside undo); TipTap's
+  Details node view had no styles in the editor.
+* The example has an editor screen (`example/lib/editor_page.dart`).
 * `createRuntime({ editorExtensions, normalizeContent, validateForSave })` for the editor mode.
 * `TiptapRuntimeController`: the base of both controllers (conversions, `call`).
 * `build.mjs` resolves TipTap and ProseMirror to the runtime's copy, so an app's extensions from its own

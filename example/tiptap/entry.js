@@ -2,7 +2,7 @@
 // node. It shows how an app adds extensions; build it with `npm run build:example` in ../../js.
 import { Node, mergeAttributes } from '@tiptap/core';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
-import { createRuntime, defaultExtensions, defaultViewHooks } from 'tiptap-view-runtime';
+import { createRuntime, defaultEmbeds, defaultExtensions, defaultViewHooks } from 'tiptap-view-runtime';
 import './callout.css';
 
 const Callout = Node.create({
@@ -25,6 +25,7 @@ const runtime = createRuntime({
   schemaVersion: 1,
   extensions: [...defaultExtensions(), Details, DetailsSummary, DetailsContent, Callout],
   viewHooks: defaultViewHooks(),
+  embeds: defaultEmbeds(),
 });
 
 // An extension event: Dart routes it to the handler of the `callout` TiptapExtension.

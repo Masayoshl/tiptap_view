@@ -24,7 +24,8 @@ const MODES = { view: createViewMode, editor: createEditorMode };
  * document's DOM and adds its own methods.
  *
  * [viewHooks] add behavior to the view mode only (see view-mode.js): previews for embeds, for one.
- * [editorExtensions], [normalizeContent] and [validateForSave] are for the editor mode (see editor-mode.js).
+ * [editorExtensions], [normalizeContent], [validateForSave] and [embeds] are for the editor mode (see
+ * editor-mode.js).
  */
 export function createRuntime({
   extensions,
@@ -34,6 +35,7 @@ export function createRuntime({
   editorExtensions = [],
   normalizeContent = null,
   validateForSave = null,
+  embeds = [],
 } = {}) {
   if (!Array.isArray(extensions) || !extensions.length) throw new Error('createRuntime needs extensions');
   const config = window.__tiptapViewConfig || {};
@@ -114,8 +116,10 @@ export function createRuntime({
   // Mode -----------------------------------------------------------------------------------------------
 
   const core = { extensions, content, emit, request, reportError, reportHeight, htmlFromJson, schemaFor, schemaVersion };
-  const options = { hooks: viewHooks, editorExtensions, normalizeContent, validateForSave };
+  const options = { hooks: viewHooks, editorExtensions, normalizeContent, validateForSave, embeds };
   const start = MODES[modeName];
+  // Styles that differ by mode (tables in the editor, for one) hang off this attribute.
+  if (start) document.documentElement.dataset.tvMode = modeName;
   let mode = null;
   if (start) {
     mode = start(core, options);

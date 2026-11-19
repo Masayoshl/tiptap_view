@@ -3,7 +3,8 @@
 Shows and edits TipTap documents in Flutter: HTML, as published pages store it, or TipTap JSON. A WebView
 renders the document with the same schema and extensions as the web editor; the Flutter page around it
 scrolls, and the widget grows to the height of its content. The editor is in progress (see the roadmap):
-documents open, edit and come back as JSON and HTML; commands and toolbars come next.
+documents open, edit and come back as JSON and HTML, with commands, a toolbar state, image uploads, links
+and embeds; the keyboard and toolbar widgets come next.
 
 ```dart
 TiptapView(
@@ -20,6 +21,18 @@ TiptapEditor(
   onChange: (change) => markDirty(),
   onIncompatibleContent: (problem) => ...,      // a document the bundle's schema cannot hold
 )
+
+// The app picks and uploads, the editor shows a placeholder meanwhile:
+controller.uploadImage(() => api.upload(file), preview: thumbnail);
+controller.setLink(url, attributes: {'title': title});
+controller.insertEmbed('https://www.youtube.com/watch?v=…');
+
+// Any extension's command by name, and the state a toolbar shows:
+controller.command('toggleHeading', {'level': 2});
+ValueListenableBuilder(
+  valueListenable: controller.state,
+  builder: (context, state, _) => BoldButton(active: state?.isActive('bold') ?? false),
+);
 ```
 
 `TiptapView` and `TiptapEditor` are two widgets on one bundle, so both always have the same schema. The

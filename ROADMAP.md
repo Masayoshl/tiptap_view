@@ -101,16 +101,19 @@ The stages below are in order: each one is usable and tested before the next.
       the input. The editor mode adds about 23 KB to a bundle.
 - [x] Changes: a debounced `change` event with a document version; the controller reads HTML or JSON
       on demand rather than every keystroke shipping the whole document.
-- [ ] Commands, generic first: `controller.command('toggleBold')`, `command('setLink', {href})`, run
-      through `editor.chain().focus()[name](args).run()`; `canRun(name, args)` for disabled states.
-      Typed shortcuts (`toggleBold()`, `setHeading(level)`) on top, only for StarterKit's commands.
-- [ ] Toolbar state: a `state` event after each transaction, with active marks and nodes (with attrs,
+- [x] Commands, generic first: `controller.command('toggleBold')`, `command('setLink', {href})`, run
+      through `editor.chain().focus()[name](args).run()`; `canRun(name, args)` for disabled states;
+      `commands()` lists them.
+- [ ] Typed shortcuts (`toggleBold()`, `setHeading(level)`) on top, only for StarterKit's commands:
+      with the toolbar building blocks (4.6), when it is clear which ones they need.
+- [x] Toolbar state: a `state` event after each transaction, with active marks and nodes (with attrs,
       for headings and alignment), `canUndo` / `canRedo`, selection (empty, inside a link, a node
       selection). Computed from the schema's names, so an app's own nodes show up without code here.
 - [x] Taps in the editor place the caret; links open only through an app action (a link bubble),
       never on a tap.
-- [ ] Wide tables in the editor scroll inside their own box: a default table view for the editor mode,
-      as `tv-table-scroll` does in the view.
+- [x] Wide tables in the editor scroll inside their own box: a fallback table node view (TipTap's
+      `TableView`, from a plugin, so an app's own table view still wins), as `tv-table-scroll` does in
+      the view.
 - [x] Document functions from the app's bundle, written in JS next to its extensions and built into the
       bundle (Dart never sends code): `createRuntime({ normalizeContent, validateForSave })`.
       `normalizeContent(json)` runs on every document going into the editor, so the web and the app
@@ -149,15 +152,24 @@ update would help) is the app's call, since the package cannot know whether a ne
 
 ### 4.4 Hooks (the app answers, the package never calls an API)
 
-- [ ] Images: `onImageUpload(file) → Future<TiptapUploadedImage>` with `src` and any attributes the
-      app's image node keeps (`data-media-id` for one); the editor shows a placeholder while it waits
-      and marks it failed, with a retry, when the upload fails. Picking the file stays with the app.
-- [ ] Links: `onLinkEdit(current) → Future<TiptapLinkEdit?>` with `href` and any attributes the app adds
-      (`data-*`), so internal links are the app's business, not a link type in the package.
-- [ ] Embeds: `onEmbedInsert() → Future<String?>` returns a URL; the bundle's extensions decide which node
-      it becomes (YouTube, iframe…), or the editor reports that none accepts it.
-- [ ] Paste: pasted HTML goes through the schema like any content; pasted images go through
-      `onImageUpload`. Later, opt-in: `data:` and `blob:` images inside pasted HTML uploaded in place.
+The app drives what it starts (its toolbar, its dialogs) through the controller; the editor calls the app
+only for what starts in the page (a paste, a tap).
+
+- [x] Images: `controller.uploadImage(upload, preview:)`. A placeholder decoration waits at the selection,
+      outside the document (so it can never be saved by accident, and the app's image node needs no
+      upload attributes), follows edits around it, and becomes the app's image node
+      (`TiptapUploadedImage(src, attributes:, node:)`, `blockImage` and `data-media-id` for embedify) once
+      the upload returns. A failure shows Retry (runs `upload` again) and Remove. Pending and failed ones
+      are `uploading` / `uploadFailed` in `getContent().errors`. Picking the file stays with the app.
+- [x] Links: `getLink()` (the link at the selection, or the selected text), `setLink(href, attributes:,
+      text:)`, `removeLink()`; the app's dialog sits in between. Attributes are the link mark's own names
+      (embedify's `pageId` renders `data-page-id`); ones it does not declare are refused, not lost.
+      `onLinkTap` reports taps on links in the editor, which never follows them.
+- [x] Embeds: `insertEmbed(url)` with the bundle's resolvers (`createRuntime({ embeds })`,
+      `defaultEmbeds()` for YouTube); returns the node type, or null when none knows the URL.
+- [x] Paste: pasted HTML goes through the schema like any content; a pasted image file goes to
+      `onImageUpload(TiptapImageFile)` with a placeholder of its own, retried by the page itself.
+- [ ] Later, opt-in: `data:` and `blob:` images inside pasted HTML uploaded in place.
 - [ ] Extension options that call an API on the web (`fetchTranscript`, `translate`) become requests:
       `fetchTranscript: src => runtime.request('fetchTranscript', { src })`, answered by a
       `TiptapExtension` in Dart. A README recipe, no new code.
@@ -181,8 +193,11 @@ update would help) is the app's call, since the package cannot know whether a ne
 
 ### 4.7 Example and tests
 
-- [ ] The example gets an editor screen: edit, save to JSON and HTML, open the saved document in
-      `TiptapView`, the same bundle in both.
+- [x] The example gets an editor screen: edit, save to JSON and HTML, open the saved document in
+      `TiptapView`, the same bundle in both. Run on the iOS simulator (iPhone 17 Pro, iOS 26.2): typing,
+      selection and the toolbar state, uploads with failure and Retry, embeds, Save into the view.
+- [ ] The same run on Android, and on a real iPhone with the on-screen keyboard (the simulator had a
+      hardware keyboard; text was pasted, not typed through the IME).
 - [ ] JS tests of the editor mode on jsdom; Dart tests of the controller with the fake session, as for
       the view.
 

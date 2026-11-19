@@ -5,7 +5,7 @@ import Youtube from '@tiptap/extension-youtube';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import TextAlign from '@tiptap/extension-text-align';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
-import { youtubePreview } from './youtube-preview.js';
+import { youtubeEmbed, youtubePreview } from './youtube-preview.js';
 
 /**
  * The extensions the default bundle knows. An app bundle usually starts from these and adds its own,
@@ -31,4 +31,9 @@ export function defaultExtensions() {
  */
 export function defaultViewHooks() {
   return [youtubePreview()];
+}
+
+/** The embed resolvers that go with [defaultExtensions]: YouTube URLs. */
+export function defaultEmbeds() {
+  return [youtubeEmbed()];
 }

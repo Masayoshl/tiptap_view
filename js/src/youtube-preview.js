@@ -1,3 +1,4 @@
+import { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import { aspectRatio } from './embeds.js';
 
 // A view hook for YouTube embeds. Players are heavy: every live iframe is a page of its own. The document
@@ -68,4 +69,9 @@ export function youtubePreview() {
       return true;
     },
   };
+}
+
+/** An embed resolver for the editor: a YouTube URL becomes the Youtube extension's node, when the schema has it. */
+export function youtubeEmbed() {
+  return (url, { schema }) => (schema.nodes.youtube && isValidYoutubeUrl(url) ? { type: 'youtube', attrs: { src: url } } : null);
 }

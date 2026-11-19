@@ -454,6 +454,173 @@ void main() {
       expect(errors.single.message, contains('unknownTypes'));
     });
 
+    testWidgets('runs commands by name and keeps the toolbar state', (tester) async {
+      final controller = TiptapEditorController();
+      addTearDown(controller.dispose);
+      final states = <TiptapEditorState>[];
+      final session = await pump(tester, () => TiptapEditor(
+            adapter: adapter,
+            bundle: bundle(),
+            controller: controller,
+            content: const TiptapContent.html('<p>a</p>'),
+            onStateChange: states.add,
+          ));
+      session.respond = (method, params) => switch (method) {
+            'setContent' => {'status': 'ok'},
+            'command' => params['name'] != 'nothingToDo',
+            'canRun' => params['name'] == 'undo',
+            'commands' => ['toggleBold', 'undo'],
+            _ => null,
+          };
+      session.ready(mode: 'editor');
+      await tester.pump();
+
+      expect(await controller.command('toggleHeading', {'level': 2}), isTrue);
+      expect(session.calls.last['params'], {'name': 'toggleHeading', 'args': [{'level': 2}], 'focus': true});
+      expect(await controller.command('nothingToDo'), isFalse);
+      expect(session.calls.last['params'], {'name': 'nothingToDo', 'args': [], 'focus': true});
+      await controller.commandWith('insertContentAt', [1, 'x'], focus: false);
+      expect(session.calls.last['params'], {'name': 'insertContentAt', 'args': [1, 'x'], 'focus': false});
+      expect(await controller.canRun('undo'), isTrue);
+      expect(await controller.canRun('redo'), isFalse);
+      expect(await controller.commands(), ['toggleBold', 'undo']);
+
+      expect(controller.state.value, isNull, reason: 'no state before the first event');
+      session.event('state', {
+        'version': 3,
+        'editable': true,
+        'focused': true,
+        'marks': {'bold': {}, 'link': {'href': '/x'}},
+        'nodes': [
+          {'type': 'bulletList', 'attrs': {}},
+          {'type': 'heading', 'attrs': {'level': 2, 'textAlign': 'center'}},
+        ],
+        'canUndo': true,
+        'canRedo': false,
+        'selection': {'empty': false, 'from': 2, 'to': 4, 'node': null},
+      });
+      final state = controller.state.value!;
+      expect(states.single, state);
+      expect(state.block?.type, 'heading');
+      expect(state.isActive('bold'), isTrue);
+      expect(state.isActive('link', {'href': '/x'}), isTrue);
+      expect(state.isActive('heading', {'level': 2}), isTrue);
+      expect(state.isActive('heading', {'level': 3}), isFalse);
+      expect(state.isActive('paragraph', {'textAlign': 'center'}), isFalse);
+      expect(state.isActive('bulletList'), isTrue);
+      expect((state.canUndo, state.canRedo, state.selectionEmpty, state.selectionFrom), (true, false, false, 2));
+
+      await tester.pumpWidget(const SizedBox());
+      expect(controller.state.value, isNull, reason: 'the state goes with the editor');
+    });
+
+    testWidgets('uploads an image through the app, with a placeholder, Retry and Remove', (tester) async {
+      final controller = TiptapEditorController();
+      addTearDown(controller.dispose);
+      final session = await pump(tester, () => TiptapEditor(adapter: adapter, bundle: bundle(), controller: controller, content: const TiptapContent.html('')));
+      session.respond = (method, params) => switch (method) {
+            'setContent' => {'status': 'ok'},
+            'finishUpload' => true,
+            _ => null,
+          };
+      session.ready(mode: 'editor');
+      await tester.pump();
+
+      var attempts = 0;
+      final failOnce = Completer<void>();
+      Future<TiptapUploadedImage> upload() async {
+        attempts++;
+        if (attempts == 1) {
+          failOnce.complete();
+          throw StateError('offline');
+        }
+        return const TiptapUploadedImage('https://cdn.example/a.png', attributes: {'mediaId': 'm1'}, node: 'blockImage');
+      }
+
+      final done = controller.uploadImage(upload, preview: Uint8List.fromList([1, 2, 3]), previewType: 'image/png');
+      await tester.pump();
+      await failOnce.future;
+      await tester.pump();
+      final begin = session.calls.firstWhere((call) => call['method'] == 'beginUpload');
+      final id = (begin['params'] as Map)['id'];
+      expect((begin['params'] as Map)['preview'], 'data:image/png;base64,AQID');
+      expect(session.calls.last['method'], 'failUpload');
+      expect((session.calls.last['params'] as Map)['message'], contains('offline'));
+
+      session.event('uploadRetry', {'id': id});
+      await tester.pump();
+      expect(await done, isTrue);
+      expect(attempts, 2);
+      expect(session.calls.last['params'], {
+        'id': id,
+        'src': 'https://cdn.example/a.png',
+        'attributes': {'mediaId': 'm1'},
+        'node': 'blockImage',
+      });
+
+      final removed = controller.uploadImage(() => Completer<TiptapUploadedImage>().future);
+      await tester.pump();
+      final second = (session.calls.lastWhere((call) => call['method'] == 'beginUpload')['params'] as Map)['id'];
+      session.event('uploadCancel', {'id': second});
+      expect(await removed, isFalse);
+
+      final orphan = controller.uploadImage(() => Completer<TiptapUploadedImage>().future);
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      expect(await orphan, isFalse, reason: 'an upload ends with its page');
+    });
+
+    testWidgets('pasted images go to onImageUpload; links and embeds go through the controller', (tester) async {
+      final controller = TiptapEditorController();
+      addTearDown(controller.dispose);
+      final files = <TiptapImageFile>[];
+      final taps = <TiptapLinkTap>[];
+      final session = await pump(tester, () => TiptapEditor(
+            adapter: adapter,
+            bundle: bundle(),
+            controller: controller,
+            content: const TiptapContent.html(''),
+            onImageUpload: (file) async {
+              files.add(file);
+              return const TiptapUploadedImage('https://cdn.example/p.png');
+            },
+            onLinkTap: taps.add,
+          ));
+      session.respond = (method, params) => switch (method) {
+            'setContent' => {'status': 'ok'},
+            'getLink' => {'active': true, 'href': '/docs', 'attributes': {'title': 'Docs'}, 'text': 'the docs', 'empty': true},
+            'setLink' || 'removeLink' => true,
+            'insertEmbed' => params['url'] == 'https://youtu.be/x' ? {'inserted': true, 'type': 'youtube'} : {'inserted': false, 'type': null},
+            _ => null,
+          };
+      session.ready(mode: 'editor');
+      await tester.pump();
+      expect(session.calls.firstWhere((call) => call['method'] == 'setImagePaste')['params'], {'enabled': true});
+
+      session.request('r1', 'imageUpload', {'data': 'AQID', 'type': 'image/png', 'name': 'shot.png'});
+      await tester.pump();
+      expect(files.single.bytes, [1, 2, 3]);
+      expect(files.single.mimeType, 'image/png');
+      expect(session.resolved.single, {
+        'id': 'r1',
+        'result': {'src': 'https://cdn.example/p.png', 'attributes': {}, 'node': 'image'},
+      });
+
+      final link = await controller.getLink();
+      expect((link.active, link.href, link.text, link.attributes['title']), (true, '/docs', 'the docs', 'Docs'));
+      await controller.setLink('/manual', attributes: {'title': 'Manual'});
+      expect(session.calls.last['params'], {'href': '/manual', 'attributes': {'title': 'Manual'}});
+      await controller.setLink('/x', text: 'X');
+      expect((session.calls.last['params'] as Map)['text'], 'X');
+      expect(await controller.removeLink(), isTrue);
+      expect(await controller.insertEmbed('https://youtu.be/x'), 'youtube');
+      expect(await controller.insertEmbed('https://example.com'), isNull);
+
+      session.event('linkTap', {'href': '/docs', 'text': 'the docs', 'attributes': {'href': '/docs'}});
+      expect(taps.single.href, '/docs');
+      expect(taps.single.uri, Uri.parse('https://tiptap-view.local/docs'));
+    });
+
     testWidgets('reports changes, reads the document and follows editable', (tester) async {
       final changes = <int>[];
       final controller = TiptapEditorController();

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tiptap_view/tiptap_view.dart';
 
+import 'editor_page.dart';
+
 void main() => runApp(const ExampleApp());
 
 class ExampleApp extends StatefulWidget {
@@ -114,6 +116,16 @@ class _SandboxPageState extends State<SandboxPage> {
       appBar: AppBar(
         title: const Text('tiptap_view'),
         actions: [
+          IconButton(
+            key: const Key('open-editor'),
+            tooltip: 'Edit this document',
+            icon: const Icon(Icons.edit_note),
+            onPressed: content == null
+                ? null
+                : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => EditorPage(bundle: _customBundle ? exampleBundle : TiptapBundle.defaults, content: content),
+                    )),
+          ),
           IconButton(
             tooltip: 'Dark theme',
             icon: Icon(widget.dark ? Icons.light_mode : Icons.dark_mode),

@@ -39,6 +39,9 @@ mixin TiptapPageHost<T extends StatefulWidget> on State<T> {
   /// event goes to the handlers of [pageExtensions].
   bool pageEvent(String name, Map<String, Object?> payload) => false;
 
+  /// The widget's own answer to the runtime's request [name], before the extensions' handlers.
+  TiptapRequestHandler? pageRequestHandler(String name) => null;
+
   /// The main frame wants to go to [url]; it never may, since that would replace the page with the bridge.
   /// The page itself (a reload, an anchor) is filtered out before this is called.
   void pageNavigationBlocked(Uri url) {}
@@ -235,8 +238,8 @@ mixin TiptapPageHost<T extends StatefulWidget> on State<T> {
 
   Future<void> _onRequest(String id, String name, Map<String, Object?> payload) async {
     final session = _session;
-    TiptapRequestHandler? handler;
-    for (final extension in pageExtensions) {
+    TiptapRequestHandler? handler = pageRequestHandler(name);
+    for (final extension in handler == null ? pageExtensions : const <TiptapExtension>[]) {
       handler = extension.requests[name];
       if (handler != null) break;
     }
