@@ -1,8 +1,9 @@
 # tiptap_view
 
-Shows TipTap documents in Flutter: HTML, as published pages store it, or TipTap JSON. A WebView renders
-the document with the same schema and extensions as the web editor; the Flutter page around it scrolls,
-and the view grows to the height of its content. Read-only for now.
+Shows and edits TipTap documents in Flutter: HTML, as published pages store it, or TipTap JSON. A WebView
+renders the document with the same schema and extensions as the web editor; the Flutter page around it
+scrolls, and the widget grows to the height of its content. The editor is in progress (see the roadmap):
+documents open, edit and come back as JSON and HTML; commands and toolbars come next.
 
 ```dart
 TiptapView(
@@ -11,6 +12,20 @@ TiptapView(
   onImageTap: (image) => ...,
 )
 ```
+
+```dart
+TiptapEditor(
+  content: TiptapContent.json(saved, schemaVersion: savedVersion),
+  controller: controller,                       // controller.getContent() → json, html, errors
+  onChange: (change) => markDirty(),
+  onIncompatibleContent: (problem) => ...,      // a document the bundle's schema cannot hold
+)
+```
+
+`TiptapView` and `TiptapEditor` are two widgets on one bundle, so both always have the same schema. The
+editor refuses JSON with node or mark types, or attributes, its schema lacks, and JSON saved with a newer
+`schemaVersion` than the bundle's: TipTap would drop them silently on save. HTML is converted through the
+schema, as a web editor does on a first edit.
 
 ## Installation
 
@@ -34,8 +49,12 @@ dependencies:
   `node js/build.mjs --entry path/to/entry.js --out path/to/assets/dir`, then
   `TiptapBundle.asset('path/to/assets/dir')`. See `example/tiptap/entry.js`.
 - **Modes and view hooks**: the runtime has a core (bridge, theme, height, schema conversions) and a mode
-  that owns the document's DOM; today that is `view`. Behavior for particular content in the view, such as
+  that owns the document's DOM: `view` for `TiptapView`, `editor` (a TipTap `Editor`) for `TiptapEditor`. Behavior for particular content in the view, such as
   the YouTube preview, is a view hook (`createRuntime({ viewHooks: defaultViewHooks() })`), not core code.
+- **Editor options in the bundle**: `createRuntime({ editorExtensions, normalizeContent, validateForSave })`,
+  JS next to the app's extensions, built into the bundle (Dart never sends code). `normalizeContent(json,
+  extensions)` runs on every document going into the editor; `validateForSave(editor)` returns what keeps
+  the document from being saved, and `getContent()` returns it as `errors`.
 - **`TiptapExtension`**: the Dart side of an extension in the bundle: the view reports a bundle that lacks
   it, routes the events it sends (`runtime.emit`) to its handlers, and answers its requests
   (`await runtime.request(name, payload)`) with its `requests` handlers.

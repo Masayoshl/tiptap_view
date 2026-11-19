@@ -1,5 +1,6 @@
 import { generateHTML, generateJSON, getSchema } from '@tiptap/core';
 import { createViewMode } from './view-mode.js';
+import { createEditorMode } from './editor-mode.js';
 
 // Bumped whenever a message changes shape. Dart refuses a runtime that speaks another version.
 // 2: requests from the page to Dart, the `mode` in `ready`.
@@ -9,8 +10,9 @@ export const TIPTAP_VERSION = typeof __TIPTAP_VERSION__ === 'string' ? __TIPTAP_
 
 const CHANNEL = 'TiptapViewBridge';
 
-// The modes this runtime can start in. The host page's config says which one; the editor comes later.
-const MODES = { view: createViewMode };
+// The modes this runtime can start in. The host page's config says which one: TiptapView starts `view`,
+// TiptapEditor starts `editor`.
+const MODES = { view: createViewMode, editor: createEditorMode };
 
 /**
  * Starts the runtime in the host page. A bundle calls it once, with its extensions:
@@ -22,8 +24,17 @@ const MODES = { view: createViewMode };
  * document's DOM and adds its own methods.
  *
  * [viewHooks] add behavior to the view mode only (see view-mode.js): previews for embeds, for one.
+ * [editorExtensions], [normalizeContent] and [validateForSave] are for the editor mode (see editor-mode.js).
  */
-export function createRuntime({ extensions, schemaVersion = null, name = 'custom', viewHooks = [] } = {}) {
+export function createRuntime({
+  extensions,
+  schemaVersion = null,
+  name = 'custom',
+  viewHooks = [],
+  editorExtensions = [],
+  normalizeContent = null,
+  validateForSave = null,
+} = {}) {
   if (!Array.isArray(extensions) || !extensions.length) throw new Error('createRuntime needs extensions');
   const config = window.__tiptapViewConfig || {};
   const token = config.token || '';
@@ -102,11 +113,12 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
 
   // Mode -----------------------------------------------------------------------------------------------
 
-  const core = { extensions, content, emit, request, reportError, reportHeight, htmlFromJson };
+  const core = { extensions, content, emit, request, reportError, reportHeight, htmlFromJson, schemaFor, schemaVersion };
+  const options = { hooks: viewHooks, editorExtensions, normalizeContent, validateForSave };
   const start = MODES[modeName];
   let mode = null;
   if (start) {
-    mode = start(core, { hooks: viewHooks });
+    mode = start(core, options);
   } else {
     reportError(new Error(`This runtime has no "${modeName}" mode; it has ${Object.keys(MODES).join(', ')}`), 'mode');
   }
@@ -149,6 +161,10 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
     mode: mode ? modeName : null,
     /** The view mode's API (`use` a view hook); its calls do nothing in other modes. */
     view: (mode && mode.view) || { use() {} },
+    /** The TipTap `Editor` in the editor mode, once a document is open; null otherwise. */
+    get editor() {
+      return mode && mode.current ? mode.current() : null;
+    },
     /** Lets a bundle add its own methods, callable from Dart with `controller.call(name, params)`. */
     register(method, handler) {
       if (methods[method]) throw new Error(`${method} is a built-in method`);

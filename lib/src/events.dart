@@ -173,3 +173,100 @@ class TiptapEvent {
 Map<String, String> _attributes(Object? value) => {
       if (value is Map) for (final entry in value.entries) '${entry.key}': '${entry.value}',
     };
+
+/// The document in a `TiptapEditor` changed. Edits are counted, not shipped: read the document with
+/// `TiptapEditorController.getContent` when it is needed.
+@immutable
+class TiptapEditorChange {
+  const TiptapEditorChange(this.version);
+
+  /// How many edits the document has had since it was opened.
+  final int version;
+
+  @override
+  String toString() => 'TiptapEditorChange($version)';
+}
+
+/// The document in a `TiptapEditor`, as `TiptapEditorController.getContent` reads it.
+@immutable
+class TiptapEditorContent {
+  const TiptapEditorContent({required this.json, required this.html, required this.version, this.errors = const []});
+
+  factory TiptapEditorContent.fromPayload(Map<String, Object?> payload) => TiptapEditorContent(
+        json: Map<String, Object?>.from(payload['json'] as Map? ?? const {}),
+        html: '${payload['html'] ?? ''}',
+        version: (payload['version'] as num?)?.toInt() ?? 0,
+        errors: List<Object?>.unmodifiable(payload['errors'] as List? ?? const []),
+      );
+
+  /// TipTap JSON: what to store, next to [html] and the bundle's schema version.
+  final Map<String, Object?> json;
+
+  /// The schema's HTML for the document.
+  final String html;
+
+  /// The edit count when it was read (see [TiptapEditorChange.version]).
+  final int version;
+
+  /// What keeps the document from being saved now, as the bundle's `validateForSave` reports it. Empty
+  /// when it can be saved.
+  final List<Object?> errors;
+
+  bool get canSave => errors.isEmpty;
+
+  @override
+  String toString() => 'TiptapEditorContent(version: $version, errors: $errors)';
+}
+
+/// Why a document cannot be edited with the bundle's schema.
+enum TiptapIncompatibility {
+  /// The document was saved with a newer schema version than the bundle's.
+  newerSchema,
+
+  /// It has node or mark types the schema lacks.
+  unknownTypes,
+
+  /// Its nodes or marks have attributes the schema does not declare.
+  unknownAttributes,
+}
+
+/// A document `TiptapEditor` refused to edit: saving it would lose what the schema cannot hold (TipTap
+/// would drop it without a word). The editor stays empty and read-only; the app shows the document another
+/// way, `TiptapView` with its saved HTML for one, and decides what to tell the user.
+@immutable
+class TiptapIncompatibleContent {
+  const TiptapIncompatibleContent({
+    required this.reason,
+    this.types = const [],
+    this.attributes = const [],
+    this.documentVersion,
+    this.bundleVersion,
+  });
+
+  factory TiptapIncompatibleContent.fromPayload(Map<String, Object?> payload) => TiptapIncompatibleContent(
+        reason: TiptapIncompatibility.values.firstWhere(
+          (value) => value.name == payload['reason'],
+          orElse: () => TiptapIncompatibility.unknownTypes,
+        ),
+        types: [for (final type in (payload['types'] as List?) ?? const []) '$type'],
+        attributes: [for (final key in (payload['attributes'] as List?) ?? const []) '$key'],
+        documentVersion: (payload['documentVersion'] as num?)?.toInt(),
+        bundleVersion: (payload['bundleVersion'] as num?)?.toInt(),
+      );
+
+  final TiptapIncompatibility reason;
+
+  /// Node and mark types the schema lacks.
+  final List<String> types;
+
+  /// Attributes the schema does not declare, as `type.attribute`.
+  final List<String> attributes;
+
+  final int? documentVersion;
+  final int? bundleVersion;
+
+  @override
+  String toString() =>
+      'TiptapIncompatibleContent(${reason.name}, types: $types, attributes: $attributes, '
+      'document: $documentVersion, bundle: $bundleVersion)';
+}

@@ -374,6 +374,131 @@ void main() {
       expect(errors.single.message, contains('callout'));
     });
   });
+
+  group('TiptapEditor', () {
+    late FakeAdapter adapter;
+
+    Future<FakeSession> pump(WidgetTester tester, Widget Function() editor) async {
+      await tester.pumpWidget(DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(home: Scaffold(body: ListView(children: [editor()]))),
+      ));
+      await tester.pump();
+      return adapter.session!;
+    }
+
+    setUp(() => adapter = FakeAdapter());
+
+    TiptapBundle bundle() => TiptapBundle.asset('bundle');
+    final document = {'type': 'doc', 'content': const []};
+
+    testWidgets('starts the editor mode and opens the document once the runtime is ready', (tester) async {
+      var opened = 0;
+      final session = await pump(tester, () => TiptapEditor(
+            adapter: adapter,
+            bundle: bundle(),
+            content: TiptapContent.json(document, schemaVersion: 1),
+            onOpened: () => opened++,
+          ));
+      expect(session.html, contains('"mode":"editor"'));
+      expect(session.calls, isEmpty, reason: 'nothing is sent before ready');
+      session.respond = (method, _) => method == 'setContent' ? {'status': 'ok'} : null;
+      session.ready(mode: 'editor');
+      await tester.pump();
+      final open = session.calls.firstWhere((call) => call['method'] == 'setContent');
+      expect(open['params'], {'format': 'json', 'content': document, 'schemaVersion': 1, 'editable': true});
+      expect(opened, 1);
+    });
+
+    testWidgets('refuses a bundle that cannot start the editor mode', (tester) async {
+      final errors = <TiptapError>[];
+      final session = await pump(tester, () => TiptapEditor(adapter: adapter, bundle: bundle(), content: const TiptapContent.html(''), onError: errors.add));
+      session.ready(mode: null);
+      await tester.pump();
+      expect(errors.single.context, 'mode');
+      expect(errors.single.message, contains('TiptapEditor needs a bundle with the "editor" runtime mode'));
+      expect(session.calls, isEmpty);
+    });
+
+    testWidgets('reports a document the schema cannot hold, to its callback or else as an error', (tester) async {
+      final refused = <TiptapIncompatibleContent>[];
+      var session = await pump(tester, () => TiptapEditor(
+            adapter: adapter,
+            bundle: bundle(),
+            content: TiptapContent.json(document, schemaVersion: 3),
+            onIncompatibleContent: refused.add,
+          ));
+      session.respond = (method, _) => {
+            'status': 'incompatible',
+            'reason': 'newerSchema',
+            'types': ['callout'],
+            'attributes': ['image.caption'],
+            'documentVersion': 3,
+            'bundleVersion': 2,
+          };
+      session.ready(mode: 'editor');
+      await tester.pump();
+      final problem = refused.single;
+      expect(problem.reason, TiptapIncompatibility.newerSchema);
+      expect(problem.types, ['callout']);
+      expect(problem.attributes, ['image.caption']);
+      expect((problem.documentVersion, problem.bundleVersion), (3, 2));
+
+      await tester.pumpWidget(const SizedBox());
+      final errors = <TiptapError>[];
+      session = await pump(tester, () => TiptapEditor(adapter: adapter, bundle: bundle(), content: TiptapContent.json(document), onError: errors.add));
+      session.respond = (method, _) => {'status': 'incompatible', 'reason': 'unknownTypes', 'types': ['x']};
+      session.ready(mode: 'editor');
+      await tester.pump();
+      expect(errors.single.context, 'content');
+      expect(errors.single.message, contains('unknownTypes'));
+    });
+
+    testWidgets('reports changes, reads the document and follows editable', (tester) async {
+      final changes = <int>[];
+      final controller = TiptapEditorController();
+      var editable = true;
+      late StateSetter setOuter;
+      final session = await pump(tester, () => StatefulBuilder(builder: (context, setState) {
+            setOuter = setState;
+            return TiptapEditor(
+              adapter: adapter,
+              bundle: bundle(),
+              controller: controller,
+              content: const TiptapContent.html('<p>a</p>'),
+              editable: editable,
+              onChange: (change) => changes.add(change.version),
+            );
+          }));
+      session.respond = (method, _) => switch (method) {
+            'setContent' => {'status': 'ok'},
+            'getContent' => {
+                'json': document,
+                'html': '<p>a</p>',
+                'version': 4,
+                'errors': [{'code': 'uploading'}],
+              },
+            _ => null,
+          };
+      session.ready(mode: 'editor');
+      await tester.pump();
+
+      session.event('change', {'version': 4});
+      expect(changes, [4]);
+
+      final content = await controller.getContent();
+      expect(content.html, '<p>a</p>');
+      expect(content.version, 4);
+      expect(content.canSave, isFalse);
+      expect(content.errors.single, {'code': 'uploading'});
+
+      setOuter(() => editable = false);
+      await tester.pump();
+      expect(session.calls.last, containsPair('method', 'setEditable'));
+      expect(session.calls.last['params'], {'editable': false});
+      expect(session.methods.where((method) => method == 'setContent').length, 1, reason: 'editable alone does not reopen');
+    });
+  });
 }
 
 class _CountingAdapter implements TiptapWebViewAdapter {

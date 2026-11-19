@@ -13,7 +13,10 @@ sealed class TiptapContent {
 
   /// TipTap JSON (`{"type": "doc", "content": [...]}`), rendered with the schema of the bundle.
   /// Node types the bundle does not know make the view report an error instead of dropping them silently.
-  const factory TiptapContent.json(Map<String, Object?> json) = TiptapJsonContent;
+  ///
+  /// [schemaVersion] is the version of the schema the document was saved with, as the app stores it next
+  /// to the JSON. `TiptapEditor` refuses a document newer than its bundle's schema; the view ignores it.
+  const factory TiptapContent.json(Map<String, Object?> json, {int? schemaVersion}) = TiptapJsonContent;
 
   /// The message the runtime's `setContent` method takes.
   Map<String, Object?> toParams();
@@ -37,18 +40,21 @@ final class TiptapHtmlContent extends TiptapContent {
 }
 
 final class TiptapJsonContent extends TiptapContent {
-  const TiptapJsonContent(this.json);
+  const TiptapJsonContent(this.json, {this.schemaVersion});
 
   final Map<String, Object?> json;
+  final int? schemaVersion;
 
   @override
-  Map<String, Object?> toParams() => {'format': 'json', 'content': json};
+  Map<String, Object?> toParams() => {'format': 'json', 'content': json, 'schemaVersion': ?schemaVersion};
 
   // JSON documents are compared by value, so rebuilding a widget with an equal map does not re-render.
   @override
   bool operator ==(Object other) =>
-      other is TiptapJsonContent && (identical(other.json, json) || jsonEncode(other.json) == jsonEncode(json));
+      other is TiptapJsonContent &&
+      other.schemaVersion == schemaVersion &&
+      (identical(other.json, json) || jsonEncode(other.json) == jsonEncode(json));
 
   @override
-  int get hashCode => jsonEncode(json).hashCode;
+  int get hashCode => Object.hash(jsonEncode(json), schemaVersion);
 }

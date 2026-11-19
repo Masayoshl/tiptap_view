@@ -31,6 +31,9 @@ What comes after 0.1.0, roughly in order. Each stage keeps the boundaries the pa
 - [ ] Text selection and copy, accessibility (VoiceOver / TalkBack over the WebView content).
 - [ ] Wide tables: horizontal scroll inside the table box on real TipTap tables (`colgroup` widths).
 - [ ] Decide the default extension set (Highlight, Details, Subscript…) against what common editors emit.
+- [ ] Sanitizer allowances from the bundle (`createRuntime({ sanitize: { addTags, addAttributes } })`):
+      an app node that renders an element the sanitizer forbids, such as embedify's
+      `button[data-video-time]` timestamps, disappears from the view today.
 - [ ] Warm a page ahead of time (a pool of one preloaded WebView) so the first document shows faster.
 
 ## 3. Sharing the schema with the web (a guide, not package code)
@@ -41,15 +44,30 @@ inside it.
 - [ ] README: how an app keeps its extensions in one place both its web editor and its bundle import
       (data only: `attrs`, `parseHTML`, `renderHTML`, commands; node views and UI stay per platform), and
       passes its schema version to `createRuntime`.
+- [ ] README: when to bump the schema version. TipTap schemas have no version of their own; the number is
+      the app's promise. Bump it on any change an older client would not keep: a new node, mark or
+      attribute, changed nesting rules. Visual changes (CSS, node views) keep it.
+- [ ] README: what an app stores and feeds back. Save `json`, the schema's `html` and the schema version
+      together; open the JSON when there is one, and HTML only for documents from before TipTap.
 - [ ] A round-trip check an app can run on its bundle and a folder of its documents: `html → json → html`
       and `json → html → json` do not change (`node js/check-schema.mjs --entry … --docs …`). The editor's
-      lossy-content check (4.3) uses the same comparison.
+      loss report (4.3) uses the same comparison.
 
 ## 4. Editor
 
-The editor is the same runtime and the same bundle in another mode. Everything the view does to the DOM
-by itself (wrapping tables, embed previews, catching taps) is view-only, because in the editor ProseMirror
-owns the DOM. The stages below are in order: each one is usable and tested before the next.
+Two widgets, one bundle:
+
+- `TiptapView` and `TiptapEditor` are separate widgets with their own controllers and callbacks; there is
+  no `editable` flag on the view. What they share (loading the bundle, the token, the bridge, requests,
+  theme, height, errors) is a private page host both are built on.
+- One bundle carries both modes, so the view and the editor always have the same schema. Extensions
+  that only matter while editing (Placeholder, CharacterCount, menus) go in
+  `createRuntime({ editorExtensions })` and never change the schema. A view-only or editor-only bundle
+  can come later if someone needs one; the `mode` handshake already covers it.
+- Everything the view does to the DOM by itself (wrapping tables, embed previews, catching taps) is
+  view-only, because in the editor ProseMirror owns the DOM.
+
+The stages below are in order: each one is usable and tested before the next.
 
 ### 4.1 Runtime modes (groundwork, no editor yet)
 
@@ -64,14 +82,24 @@ owns the DOM. The stages below are in order: each one is usable and tested befor
 - [x] A JS → Dart call that waits for an answer (`{type: "request", id, name, payload}` and Dart's
       response), next to events. The editor's hooks (4.4) need it.
 - [x] `PROTOCOL_VERSION` 2; the view keeps working unchanged on it.
+- [x] One copy of TipTap in an app bundle: `build.mjs` resolves every `@tiptap/*` and `prosemirror-*`
+      import to the runtime's copy when it has one, so extensions from the app's own repository (with
+      their own `node_modules`) do not bring a second schema implementation. Tried on embedify's schema:
+      970 KB with two copies, 550 KB with one.
+- [ ] `youtubePreview` lets other hooks start a player (`activate(src)`), so a hook that seeks a video
+      from a timestamp can start it first instead of turning previews off.
 
 ### 4.2 Editing core
 
-- [ ] Editor mode: `new Editor({ element, extensions, content, editable })` in `#tv-content`, with the
+- [x] Move the page host out of `_TiptapViewState` (load, token, bridge, requests, theme, height, errors),
+      so `TiptapView` and `TiptapEditor` share it; the view's tests stay as they are.
+- [x] Conversions both controllers have (`htmlToJson`, `jsonToHtml`, `nodeTypes`) in a shared base.
+- [x] Editor mode: `new Editor({ element, extensions, content, editable })` in `#tv-content`, with the
       bundle's extensions. Sanitizing is the schema's parse: content goes in through the schema only.
-- [ ] `TiptapEditor` widget + `TiptapEditorController`: `setContent` / `getHtml` / `getJson`,
-      `editable`, `focus` / `blur`, `clear`. `TiptapContent` is reused for the input.
-- [ ] Changes: a debounced `change` event with a document version; the controller reads HTML or JSON
+- [x] `TiptapEditor` widget + `TiptapEditorController`: `content` opens a document (each new value afresh,
+      with a new undo history), `editable`, `getContent()`, `focus` / `blur`. `TiptapContent` is reused for
+      the input. The editor mode adds about 23 KB to a bundle.
+- [x] Changes: a debounced `change` event with a document version; the controller reads HTML or JSON
       on demand rather than every keystroke shipping the whole document.
 - [ ] Commands, generic first: `controller.command('toggleBold')`, `command('setLink', {href})`, run
       through `editor.chain().focus()[name](args).run()`; `canRun(name, args)` for disabled states.
@@ -79,28 +107,60 @@ owns the DOM. The stages below are in order: each one is usable and tested befor
 - [ ] Toolbar state: a `state` event after each transaction, with active marks and nodes (with attrs,
       for headings and alignment), `canUndo` / `canRedo`, selection (empty, inside a link, a node
       selection). Computed from the schema's names, so an app's own nodes show up without code here.
-- [ ] Taps in the editor place the caret; links open only through an app action (a link bubble),
+- [x] Taps in the editor place the caret; links open only through an app action (a link bubble),
       never on a tap.
+- [ ] Wide tables in the editor scroll inside their own box: a default table view for the editor mode,
+      as `tv-table-scroll` does in the view.
+- [x] Document functions from the app's bundle, written in JS next to its extensions and built into the
+      bundle (Dart never sends code): `createRuntime({ normalizeContent, validateForSave })`.
+      `normalizeContent(json)` runs on every document going into the editor, so the web and the app
+      turn the same HTML into the same document. `validateForSave(editor)` runs in `getContent()`,
+      which returns `{json, html, errors}`; form rules (title, permissions, revisions) stay in Dart.
+- [x] Pin down TipTap's own behavior with tests before building on it (`js/test/tiptap-behavior.test.js`,
+      TipTap 3.31):
+      - an unknown node or mark type in JSON: with `enableContentCheck` off (the default) a console
+        warning and an **empty document**; with it on, an exception. So the 4.3 check runs before
+        content reaches the editor.
+      - attributes a node or mark does not declare: dropped silently, with or without
+        `enableContentCheck`; the saved JSON and HTML no longer have them. TipTap does not see this, so
+        the 4.3 check compares attribute keys with the schema too.
+      - declared attributes the JSON leaves out get their defaults on load: a link without `target`
+        is saved back with `target="_blank"` and the default `rel`.
 
-### 4.3 Content that would be lost
+### 4.3 Documents the schema cannot hold
 
-- [ ] JSON with node or mark types outside the schema: refuse to edit, open read-only, say which.
-- [ ] HTML that the schema cannot keep (legacy markup: divs with styles, unknown classes): compare
-      `sanitize(html)` with `generateHTML(generateJSON(html))` after normalizing, report what is lost
-      (tags, attributes, how many), and open read-only unless the app passes `allowLossyEdit: true`
-      after showing that to the user.
-- [ ] Tests on fixtures: clean TipTap HTML is never reported as lossy; legacy HTML always is.
+The rule: the document and the bundle each say what schema they need, and when they do not agree the
+editor refuses to edit. The package says why, in neutral terms; what the user is told (and whether an
+update would help) is the app's call, since the package cannot know whether a newer app exists.
+
+- [x] Structural check, always: node and mark types in the JSON that the bundle's schema lacks, and
+      attribute keys a node or mark does not declare (the check embedify's web editor already does in
+      `isSupportedPageDocument`). A walk of the JSON: well under a millisecond for 20,000 nodes.
+- [x] Version check, when the app passes the document's version (`TiptapContent.json(map,
+      schemaVersion: 2)`; it is stored next to the JSON, not inside it): a document newer than the
+      bundle's `schemaVersion`.
+- [x] Either one: the editor does not start editing and reports
+      `TiptapIncompatibleContent(reason: newerSchema | unknownTypes | unknownAttributes, types: […],
+      attributes: […], documentVersion, bundleVersion)`.
+      The app shows the document another way, `TiptapView` with the HTML the web saved for one.
+- [ ] HTML from before TipTap is converted through the schema, as the web editor does on the first edit;
+      what the schema drops is the product's accepted cost. An optional `onContentLoss` report (what was
+      dropped) for apps that want to tell the user; it never blocks.
 
 ### 4.4 Hooks (the app answers, the package never calls an API)
 
-- [ ] Images: `onImageUpload(file) → Future<Uri>`; the editor shows a placeholder node while it waits and
-      removes it on failure. Picking the file stays with the app.
+- [ ] Images: `onImageUpload(file) → Future<TiptapUploadedImage>` with `src` and any attributes the
+      app's image node keeps (`data-media-id` for one); the editor shows a placeholder while it waits
+      and marks it failed, with a retry, when the upload fails. Picking the file stays with the app.
 - [ ] Links: `onLinkEdit(current) → Future<TiptapLinkEdit?>` with `href` and any attributes the app adds
       (`data-*`), so internal links are the app's business, not a link type in the package.
 - [ ] Embeds: `onEmbedInsert() → Future<String?>` returns a URL; the bundle's extensions decide which node
       it becomes (YouTube, iframe…), or the editor reports that none accepts it.
 - [ ] Paste: pasted HTML goes through the schema like any content; pasted images go through
-      `onImageUpload`.
+      `onImageUpload`. Later, opt-in: `data:` and `blob:` images inside pasted HTML uploaded in place.
+- [ ] Extension options that call an API on the web (`fetchTranscript`, `translate`) become requests:
+      `fetchTranscript: src => runtime.request('fetchTranscript', { src })`, answered by a
+      `TiptapExtension` in Dart. A README recipe, no new code.
 
 ### 4.5 Layout and keyboard
 

@@ -42,7 +42,7 @@ test('announces itself with the protocol, schema and extensions', () => {
   assert.equal(ready.payload.bundle, 'test');
   assert.equal(ready.payload.schemaVersion, 7);
   assert.equal(ready.payload.mode, 'view');
-  assert.deepEqual(ready.payload.modes, ['view']);
+  assert.deepEqual(ready.payload.modes, ['view', 'editor']);
   assert.ok(ready.payload.extensions.includes('starterKit'));
 });
 

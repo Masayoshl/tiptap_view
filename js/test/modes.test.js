@@ -10,7 +10,7 @@ const { window } = dom;
 for (const key of ['window', 'document', 'Element', 'HTMLElement', 'Node', 'DOMParser', 'CustomEvent', 'getComputedStyle']) {
   globalThis[key] = key === 'window' ? window : window[key];
 }
-window.__tiptapViewConfig = { token: 'secret', mode: 'editor' };
+window.__tiptapViewConfig = { token: 'secret', mode: 'slides' };
 const messages = [];
 window.TiptapViewBridge = { postMessage: text => messages.push(JSON.parse(text)) };
 
@@ -19,7 +19,7 @@ test('reports a mode it lacks and announces no mode', async () => {
   const runtime = mod.createRuntime({ name: 'test', extensions: mod.defaultExtensions() });
   const error = messages.find(message => message.event === 'error');
   assert.equal(error.payload.context, 'mode');
-  assert.match(error.payload.message, /no "editor" mode/);
+  assert.match(error.payload.message, /no "slides" mode/);
   const ready = messages.find(message => message.event === 'ready');
   assert.equal(ready.payload.mode, null);
   assert.equal(runtime.mode, null);
