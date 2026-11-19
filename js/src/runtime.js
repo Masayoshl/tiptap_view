@@ -1,28 +1,36 @@
 import { generateHTML, generateJSON, getSchema } from '@tiptap/core';
-import { sanitize } from './sanitize.js';
-import { activateEmbed, prepareEmbeds } from './embeds.js';
+import { createViewMode } from './view-mode.js';
 
 // Bumped whenever a message changes shape. Dart refuses a runtime that speaks another version.
-export const PROTOCOL_VERSION = 1;
+// 2: requests from the page to Dart, the `mode` in `ready`.
+export const PROTOCOL_VERSION = 2;
 export const RUNTIME_VERSION = typeof __RUNTIME_VERSION__ === 'string' ? __RUNTIME_VERSION__ : 'dev';
 export const TIPTAP_VERSION = typeof __TIPTAP_VERSION__ === 'string' ? __TIPTAP_VERSION__ : 'dev';
 
 const CHANNEL = 'TiptapViewBridge';
 
+// The modes this runtime can start in. The host page's config says which one; the editor comes later.
+const MODES = { view: createViewMode };
+
 /**
  * Starts the runtime in the host page. A bundle calls it once, with its extensions:
  *
- *   createRuntime({ extensions: [...defaultExtensions(), MyNode], schemaVersion: 3 });
+ *   createRuntime({ extensions: [...defaultExtensions(), MyNode], viewHooks: defaultViewHooks(), schemaVersion: 3 });
  *
- * The extensions define the document schema: JSON content is rendered with them, and HTML can be
- * converted to JSON with them. HTML content itself is shown as it is, after sanitizing, the way a web
- * reader shows a published page.
+ * The extensions define the document schema. The core here is what every mode shares: the bridge to Dart,
+ * methods and events, requests, the theme, height reports and errors. A mode (see view-mode.js) owns the
+ * document's DOM and adds its own methods.
+ *
+ * [viewHooks] add behavior to the view mode only (see view-mode.js): previews for embeds, for one.
  */
-export function createRuntime({ extensions, schemaVersion = null, name = 'custom' } = {}) {
+export function createRuntime({ extensions, schemaVersion = null, name = 'custom', viewHooks = [] } = {}) {
   if (!Array.isArray(extensions) || !extensions.length) throw new Error('createRuntime needs extensions');
   const config = window.__tiptapViewConfig || {};
   const token = config.token || '';
+  const modeName = config.mode || 'view';
   const handlers = new Map();
+  const requests = new Map();
+  let requestId = 0;
   let schema = null;
   const schemaFor = () => (schema ??= getSchema(extensions));
 
@@ -37,39 +45,33 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
     post({ type: 'event', event, payload });
   }
 
+  /** Asks Dart something and waits for the answer: an extension's request handler gives it. */
+  function request(requestName, payload = {}) {
+    const id = `r${++requestId}`;
+    return new Promise((resolve, reject) => {
+      requests.set(id, { resolve, reject });
+      post({ type: 'request', id, name: requestName, payload });
+    });
+  }
+
+  /** Entry point for Dart's answers to [request]: `window.tiptapView.resolve({ id, result | error })`. */
+  function resolve(message) {
+    const { id, result, error } = message || {};
+    const pending = requests.get(id);
+    if (!pending) return;
+    requests.delete(id);
+    if (typeof error === 'string') pending.reject(new Error(error));
+    else pending.resolve(result === undefined ? null : result);
+  }
+
   function reportError(error, context) {
     emit('error', { message: String((error && error.message) || error), context, stack: error && error.stack });
   }
 
-  // Content --------------------------------------------------------------------------------------------
+  // Height ---------------------------------------------------------------------------------------------
 
   const root = document.getElementById('tv-root');
   const content = document.getElementById('tv-content');
-
-  function render(html, { sanitized = true } = {}) {
-    content.innerHTML = sanitized ? sanitize(html, window) : html;
-    for (const image of Array.from(content.querySelectorAll('img'))) {
-      if (!image.hasAttribute('loading')) image.setAttribute('loading', 'lazy');
-      image.addEventListener('load', reportHeight, { once: true });
-    }
-    // Wide tables scroll sideways inside their own box, not the page.
-    for (const table of Array.from(content.querySelectorAll('table'))) {
-      if (table.parentElement && table.parentElement.classList.contains('tv-table-scroll')) continue;
-      const box = document.createElement('div');
-      box.className = 'tv-table-scroll';
-      table.replaceWith(box);
-      box.appendChild(table);
-    }
-    const embeds = prepareEmbeds(content);
-    reportHeight();
-    return { embeds };
-  }
-
-  function htmlFromJson(json) {
-    return generateHTML(json, extensions);
-  }
-
-  // Height ---------------------------------------------------------------------------------------------
 
   let lastHeight = -1;
   function reportHeight() {
@@ -80,55 +82,6 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
   }
   if (typeof ResizeObserver === 'function') new ResizeObserver(reportHeight).observe(root);
   window.addEventListener('load', reportHeight);
-
-  // Taps -----------------------------------------------------------------------------------------------
-
-  function attributes(element) {
-    const result = {};
-    for (const attribute of Array.from(element.attributes)) result[attribute.name] = attribute.value;
-    return result;
-  }
-
-  document.addEventListener('click', event => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-
-    const embed = target.closest('.tv-embed--youtube:not(.tv-embed--live)');
-    if (embed) {
-      event.preventDefault();
-      activateEmbed(embed);
-      emit('embedActivate', { src: embed.dataset.src || '' });
-      return;
-    }
-
-    const link = target.closest('a');
-    if (link && content.contains(link)) {
-      event.preventDefault();
-      if (!link.hasAttribute('href')) return;
-      emit('linkTap', { href: link.getAttribute('href'), text: link.textContent || '', attributes: attributes(link) });
-      return;
-    }
-
-    if (target.tagName === 'IMG' && content.contains(target)) {
-      // Where the image is, so the app can fly it into a full-screen viewer; the page never scrolls inside
-      // the view, so the rect is relative to the view's top left.
-      const box = target.getBoundingClientRect();
-      emit('imageTap', {
-        src: target.getAttribute('src') || '',
-        alt: target.getAttribute('alt') || '',
-        attributes: attributes(target),
-        index: images().indexOf(target),
-        rect: { left: box.left, top: box.top, width: box.width, height: box.height },
-      });
-    }
-  }, true);
-
-  function images() {
-    return Array.from(content.querySelectorAll('img:not(.tv-embed__poster)'));
-  }
-
-  // Collapsible blocks change the height when they open or close.
-  document.addEventListener('toggle', reportHeight, true);
 
   // Theme ----------------------------------------------------------------------------------------------
 
@@ -143,28 +96,29 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
     reportHeight();
   }
 
+  // Schema ---------------------------------------------------------------------------------------------
+
+  const htmlFromJson = json => generateHTML(typeof json === 'string' ? JSON.parse(json) : json, extensions);
+
+  // Mode -----------------------------------------------------------------------------------------------
+
+  const core = { extensions, content, emit, request, reportError, reportHeight, htmlFromJson };
+  const start = MODES[modeName];
+  let mode = null;
+  if (start) {
+    mode = start(core, { hooks: viewHooks });
+  } else {
+    reportError(new Error(`This runtime has no "${modeName}" mode; it has ${Object.keys(MODES).join(', ')}`), 'mode');
+  }
+
   // Methods called from Dart ---------------------------------------------------------------------------
 
   const methods = {
-    setContent({ format, content: value, sanitize: clean = true }) {
-      if (format === 'json') {
-        // Rendered by the schema, so it is clean by construction; sanitizing again changes nothing.
-        return render(htmlFromJson(typeof value === 'string' ? JSON.parse(value) : value), { sanitized: clean });
-      }
-      return render(String(value ?? ''), { sanitized: clean });
-    },
     setTheme,
-    getHtml: () => content.innerHTML,
     htmlToJson: ({ html }) => generateJSON(String(html ?? ''), extensions),
-    jsonToHtml: ({ json }) => htmlFromJson(typeof json === 'string' ? JSON.parse(json) : json),
+    jsonToHtml: ({ json }) => htmlFromJson(json),
     nodeTypes: () => Object.keys(schemaFor().nodes),
-    // Hides an image in place while the app shows a copy of it elsewhere, a full-screen viewer for one.
-    setImageHidden({ index, hidden }) {
-      const image = images()[index];
-      if (!image) return false;
-      image.style.visibility = hidden ? 'hidden' : '';
-      return true;
-    },
+    ...(mode ? mode.methods : {}),
   };
 
   /** Entry point for Dart: `window.tiptapView.receive({ id, method, params })`. */
@@ -188,7 +142,13 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
 
   const runtime = {
     receive,
+    resolve,
     emit,
+    request,
+    /** The started mode's name, or null when the host page asked for a mode this runtime lacks. */
+    mode: mode ? modeName : null,
+    /** The view mode's API (`use` a view hook); its calls do nothing in other modes. */
+    view: (mode && mode.view) || { use() {} },
     /** Lets a bundle add its own methods, callable from Dart with `controller.call(name, params)`. */
     register(method, handler) {
       if (methods[method]) throw new Error(`${method} is a built-in method`);
@@ -203,6 +163,8 @@ export function createRuntime({ extensions, schemaVersion = null, name = 'custom
     tiptapVersion: TIPTAP_VERSION,
     bundle: name,
     schemaVersion,
+    mode: runtime.mode,
+    modes: Object.keys(MODES),
     extensions: extensions.map(extension => extension.name),
   });
 

@@ -1,3 +1,16 @@
+## Unreleased
+
+Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol is now 2.
+
+* The runtime is a core plus a mode; the host page says which mode starts, and `ready` reports it. The view
+  refuses a bundle that cannot start in its mode.
+* View-only DOM work (sanitized `innerHTML`, table boxes, lazy images, taps) lives in the view mode.
+* View hooks (`viewHooks` in `createRuntime`, `runtime.view.use`): the YouTube preview is one, in
+  `defaultViewHooks()`. App bundles that want it add `viewHooks: defaultViewHooks()`. Images a hook adds
+  carry `data-tv-decoration` and are not counted as the document's images.
+* Requests from the page to Dart: `runtime.request(name, payload)` returns a promise that
+  `TiptapExtension.requests` handlers answer.
+
 ## 0.1.0
 
 First version: the read-only view.

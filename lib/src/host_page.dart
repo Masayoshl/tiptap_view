@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
 
-/// Builds the page the WebView loads: the bundle's styles and script inline, the session token, and the
-/// two elements the runtime renders into.
+/// Builds the page the WebView loads: the bundle's styles and script inline, the session token, the mode
+/// the runtime starts in, and the two elements the runtime renders into.
 abstract final class TiptapHostPage {
-  static String build({required String js, required String css, required String token}) {
-    final config = jsonEncode({'token': token});
+  static String build({required String js, required String css, required String token, String mode = 'view'}) {
+    final config = jsonEncode({'token': token, 'mode': mode});
     return '<!doctype html>'
         '<html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">'

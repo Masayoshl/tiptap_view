@@ -3,12 +3,13 @@ import 'dart:convert';
 /// Messages between Dart and the JS runtime.
 ///
 /// Dart calls the runtime with `window.tiptapView.receive({id, method, params})`; the runtime answers with
-/// `{type: "response", id, result | error}` and sends `{type: "event", event, payload}` on its own. Every
-/// message from the runtime carries the session token Dart put into the host page, so messages from
+/// `{type: "response", id, result | error}` and sends `{type: "event", event, payload}` on its own. The
+/// runtime can also ask Dart with `{type: "request", id, name, payload}`; Dart answers with
+/// `window.tiptapView.resolve({id, result | error})`. Every message from the runtime carries the session token Dart put into the host page, so messages from
 /// anything else in the page, an embedded frame for one, are dropped.
 abstract final class TiptapProtocol {
   /// The protocol this package speaks; the runtime announces its own in the `ready` event.
-  static const int version = 1;
+  static const int version = 2;
 
   /// The JavaScript channel the runtime posts to.
   static const String channel = 'TiptapViewBridge';
@@ -17,6 +18,12 @@ abstract final class TiptapProtocol {
   static String call(String id, String method, Map<String, Object?> params) {
     // jsonEncode output is a valid JavaScript literal.
     return 'window.tiptapView && window.tiptapView.receive(${jsonEncode({'id': id, 'method': method, 'params': params})});';
+  }
+
+  /// The script that answers the runtime's request [id] with [result], or with [error] when it is not null.
+  static String respond(String id, {Object? result, String? error}) {
+    final message = {'id': id, if (error != null) 'error': error else 'result': result};
+    return 'window.tiptapView && window.tiptapView.resolve(${jsonEncode(message)});';
   }
 
   /// Parses a message posted by the runtime. Returns null for anything malformed or without [token].
@@ -39,6 +46,12 @@ abstract final class TiptapProtocol {
         if (id is! String) return null;
         final error = decoded['error'];
         return TiptapResponseMessage(id, result: decoded['result'], error: error is String ? error : null);
+      case 'request':
+        final id = decoded['id'];
+        final name = decoded['name'];
+        if (id is! String || name is! String) return null;
+        final payload = decoded['payload'];
+        return TiptapRequestMessage(id, name, payload is Map<String, Object?> ? payload : const {});
     }
     return null;
   }
@@ -61,4 +74,12 @@ final class TiptapResponseMessage extends TiptapMessage {
   final String id;
   final Object? result;
   final String? error;
+}
+
+final class TiptapRequestMessage extends TiptapMessage {
+  const TiptapRequestMessage(this.id, this.name, this.payload);
+
+  final String id;
+  final String name;
+  final Map<String, Object?> payload;
 }

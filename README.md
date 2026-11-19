@@ -33,8 +33,12 @@ dependencies:
   An app with its own extensions writes an entry that calls `createRuntime` and builds it:
   `node js/build.mjs --entry path/to/entry.js --out path/to/assets/dir`, then
   `TiptapBundle.asset('path/to/assets/dir')`. See `example/tiptap/entry.js`.
+- **Modes and view hooks**: the runtime has a core (bridge, theme, height, schema conversions) and a mode
+  that owns the document's DOM; today that is `view`. Behavior for particular content in the view, such as
+  the YouTube preview, is a view hook (`createRuntime({ viewHooks: defaultViewHooks() })`), not core code.
 - **`TiptapExtension`**: the Dart side of an extension in the bundle: the view reports a bundle that lacks
-  it, and routes the events it sends (`runtime.emit`) to its handlers.
+  it, routes the events it sends (`runtime.emit`) to its handlers, and answers its requests
+  (`await runtime.request(name, payload)`) with its `requests` handlers.
 - **`TiptapWebViewAdapter`**: the WebView behind the view. `WebViewFlutterAdapter` (the default) uses the
   official `webview_flutter`, with Swift Package Manager support on iOS.
 - **Taps**: `onLinkTap` gets the href and the link's attributes; `onImageTap` gets the image, its index and

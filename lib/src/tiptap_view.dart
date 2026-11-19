@@ -106,6 +106,8 @@ class _TiptapViewState extends State<TiptapView> with AutomaticKeepAliveClientMi
 
   Uri get _baseUrl => widget.baseUrl ?? TiptapView.defaultBaseUrl;
 
+  static const String _mode = 'view';
+
   TiptapTheme _theme(BuildContext context) => widget.theme ?? TiptapTheme.of(context);
 
   @override
@@ -139,7 +141,7 @@ class _TiptapViewState extends State<TiptapView> with AutomaticKeepAliveClientMi
       final assets = await widget.bundle.load(DefaultAssetBundle.of(context));
       if (!mounted) return;
       await _session.loadHtml(
-        TiptapHostPage.build(js: assets.js, css: assets.css, token: _token),
+        TiptapHostPage.build(js: assets.js, css: assets.css, token: _token, mode: _mode),
         baseUrl: _baseUrl,
       );
     } catch (error, stack) {
@@ -229,6 +231,34 @@ class _TiptapViewState extends State<TiptapView> with AutomaticKeepAliveClientMi
         }
       case TiptapEventMessage(:final event, :final payload):
         _onEvent(event, payload);
+      case TiptapRequestMessage(:final id, :final name, :final payload):
+        unawaited(_onRequest(id, name, payload));
+    }
+  }
+
+  Future<void> _onRequest(String id, String name, Map<String, Object?> payload) async {
+    final session = _session;
+    TiptapRequestHandler? handler;
+    for (final extension in widget.extensions) {
+      handler = extension.requests[name];
+      if (handler != null) break;
+    }
+    String script;
+    if (handler == null) {
+      script = TiptapProtocol.respond(id, error: 'No handler for request: $name');
+    } else {
+      try {
+        script = TiptapProtocol.respond(id, result: await handler(payload));
+      } catch (error) {
+        script = TiptapProtocol.respond(id, error: '$error');
+      }
+    }
+    // The page may have been replaced or disposed while the handler ran; its request died with it.
+    if (!mounted || session != _session) return;
+    try {
+      await session.runJavaScript(script);
+    } catch (error) {
+      _report(TiptapError('Could not answer the request $name: $error', context: 'request'));
     }
   }
 
@@ -262,6 +292,14 @@ class _TiptapViewState extends State<TiptapView> with AutomaticKeepAliveClientMi
         'The bundle speaks protocol ${info.protocol}, this package speaks ${TiptapProtocol.version}. '
         'Rebuild the bundle with this version of tiptap_view.',
         context: 'protocol',
+      ));
+      return;
+    }
+    if (info.mode != _mode) {
+      _report(TiptapError(
+        'The bundle "${info.bundle}" cannot start in the $_mode mode (it has ${info.modes.join(', ')}). '
+        'Rebuild the bundle with this version of tiptap_view.',
+        context: 'mode',
       ));
       return;
     }

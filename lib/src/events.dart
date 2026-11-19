@@ -11,6 +11,8 @@ class TiptapReadyInfo {
     required this.bundle,
     required this.schemaVersion,
     required this.extensions,
+    this.mode,
+    this.modes = const [],
   });
 
   factory TiptapReadyInfo.fromPayload(Map<String, Object?> payload) => TiptapReadyInfo(
@@ -20,6 +22,8 @@ class TiptapReadyInfo {
         bundle: '${payload['bundle'] ?? ''}',
         schemaVersion: (payload['schemaVersion'] as num?)?.toInt(),
         extensions: [for (final name in (payload['extensions'] as List?) ?? const []) '$name'],
+        mode: payload['mode'] as String?,
+        modes: [for (final name in (payload['modes'] as List?) ?? const []) '$name'],
       );
 
   final int protocol;
@@ -35,10 +39,16 @@ class TiptapReadyInfo {
   /// Names of the top-level extensions in the bundle.
   final List<String> extensions;
 
+  /// The mode the runtime started in (`view`), or null when the page asked for one the runtime lacks.
+  final String? mode;
+
+  /// The modes the runtime can start in.
+  final List<String> modes;
+
   @override
   String toString() =>
       'TiptapReadyInfo(bundle: $bundle, runtime: $runtimeVersion, tiptap: $tiptapVersion, protocol: $protocol, '
-      'schema: $schemaVersion, extensions: $extensions)';
+      'schema: $schemaVersion, mode: $mode, extensions: $extensions)';
 }
 
 /// A tap on a link. The view never navigates by itself; the app decides what a link does.

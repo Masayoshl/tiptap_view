@@ -1,3 +1,3 @@
-import { createRuntime, defaultExtensions } from './index.js';
+import { createRuntime, defaultExtensions, defaultViewHooks } from './index.js';
 
-createRuntime({ name: 'default', extensions: defaultExtensions() });
+createRuntime({ name: 'default', extensions: defaultExtensions(), viewHooks: defaultViewHooks() });

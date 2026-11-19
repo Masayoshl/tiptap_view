@@ -5,6 +5,7 @@ import Youtube from '@tiptap/extension-youtube';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import TextAlign from '@tiptap/extension-text-align';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
+import { youtubePreview } from './youtube-preview.js';
 
 /**
  * The extensions the default bundle knows. An app bundle usually starts from these and adds its own,
@@ -22,4 +23,12 @@ export function defaultExtensions() {
     TaskList,
     TaskItem.configure({ nested: true }),
   ];
+}
+
+/**
+ * The view hooks that go with [defaultExtensions]: a still preview for YouTube embeds that becomes a player
+ * on tap. Fresh instances each call, like the extensions.
+ */
+export function defaultViewHooks() {
+  return [youtubePreview()];
 }

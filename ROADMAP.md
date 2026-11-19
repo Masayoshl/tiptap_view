@@ -33,24 +33,98 @@ What comes after 0.1.0, roughly in order. Each stage keeps the boundaries the pa
 - [ ] Decide the default extension set (Highlight, Details, Subscript…) against what common editors emit.
 - [ ] Warm a page ahead of time (a pool of one preloaded WebView) so the first document shows faster.
 
-## 3. Share the schema with the web
+## 3. Sharing the schema with the web (a guide, not package code)
 
-- [ ] Move the app's extensions out of the web project into their own package (`@<app>/editor-schema`):
-      data only (`attrs`, `parseHTML`, `renderHTML`, commands); node views and UI stay per platform.
-- [ ] App bundles import that package; `SCHEMA_VERSION` from it goes into `createRuntime`.
-- [ ] Round-trip tests in the schema package: `html → json → html` does not change.
+The schema belongs to the app, so this stage is documentation and checks the package offers, not work
+inside it.
+
+- [ ] README: how an app keeps its extensions in one place both its web editor and its bundle import
+      (data only: `attrs`, `parseHTML`, `renderHTML`, commands; node views and UI stay per platform), and
+      passes its schema version to `createRuntime`.
+- [ ] A round-trip check an app can run on its bundle and a folder of its documents: `html → json → html`
+      and `json → html → json` do not change (`node js/check-schema.mjs --entry … --docs …`). The editor's
+      lossy-content check (4.3) uses the same comparison.
 
 ## 4. Editor
 
-- [ ] `TiptapEditor` + `TiptapEditorController`: the same runtime in editable mode.
-- [ ] Content in and out as HTML and JSON; a change stream; commands (`toggleBold`, `setLink`,
-      `insertTable`…) and a state stream for toolbars (active marks, can undo, block type).
-- [ ] Toolbar building blocks in Flutter; the app composes its own toolbar.
-- [ ] Hooks instead of API calls: upload an image and return its URL, pick a link target, insert an embed.
-- [ ] Refuse to edit a document with nodes outside the loaded schema (open read-only and say so): saving
-      it would drop them silently.
-- [ ] iOS keyboard: focus, scrolling to the caret, the accessory bar above the keyboard. If
-      `webview_flutter` cannot do what is needed, a second adapter.
+The editor is the same runtime and the same bundle in another mode. Everything the view does to the DOM
+by itself (wrapping tables, embed previews, catching taps) is view-only, because in the editor ProseMirror
+owns the DOM. The stages below are in order: each one is usable and tested before the next.
+
+### 4.1 Runtime modes (groundwork, no editor yet)
+
+- [x] Split `runtime.js` into a core (bridge, methods, events, theme, height, errors) and modes. The
+      host page config says which mode starts: `view` (today's behavior) or `editor`.
+- [x] View-only code moves into the view mode: `render` through `innerHTML`, table boxes, lazy images,
+      tap capture, `setImageHidden`.
+- [x] Take YouTube out of the core. A bundle adds view behavior through a hook
+      (`createRuntime({ viewHooks })` or `runtime.view.use({ prepare(root), click(target, event) })`); the YouTube preview becomes one
+      such hook, registered by the default bundle. The core no longer knows `.tv-embed--youtube` or
+      `.tv-embed__poster`.
+- [x] A JS → Dart call that waits for an answer (`{type: "request", id, name, payload}` and Dart's
+      response), next to events. The editor's hooks (4.4) need it.
+- [x] `PROTOCOL_VERSION` 2; the view keeps working unchanged on it.
+
+### 4.2 Editing core
+
+- [ ] Editor mode: `new Editor({ element, extensions, content, editable })` in `#tv-content`, with the
+      bundle's extensions. Sanitizing is the schema's parse: content goes in through the schema only.
+- [ ] `TiptapEditor` widget + `TiptapEditorController`: `setContent` / `getHtml` / `getJson`,
+      `editable`, `focus` / `blur`, `clear`. `TiptapContent` is reused for the input.
+- [ ] Changes: a debounced `change` event with a document version; the controller reads HTML or JSON
+      on demand rather than every keystroke shipping the whole document.
+- [ ] Commands, generic first: `controller.command('toggleBold')`, `command('setLink', {href})`, run
+      through `editor.chain().focus()[name](args).run()`; `canRun(name, args)` for disabled states.
+      Typed shortcuts (`toggleBold()`, `setHeading(level)`) on top, only for StarterKit's commands.
+- [ ] Toolbar state: a `state` event after each transaction, with active marks and nodes (with attrs,
+      for headings and alignment), `canUndo` / `canRedo`, selection (empty, inside a link, a node
+      selection). Computed from the schema's names, so an app's own nodes show up without code here.
+- [ ] Taps in the editor place the caret; links open only through an app action (a link bubble),
+      never on a tap.
+
+### 4.3 Content that would be lost
+
+- [ ] JSON with node or mark types outside the schema: refuse to edit, open read-only, say which.
+- [ ] HTML that the schema cannot keep (legacy markup: divs with styles, unknown classes): compare
+      `sanitize(html)` with `generateHTML(generateJSON(html))` after normalizing, report what is lost
+      (tags, attributes, how many), and open read-only unless the app passes `allowLossyEdit: true`
+      after showing that to the user.
+- [ ] Tests on fixtures: clean TipTap HTML is never reported as lossy; legacy HTML always is.
+
+### 4.4 Hooks (the app answers, the package never calls an API)
+
+- [ ] Images: `onImageUpload(file) → Future<Uri>`; the editor shows a placeholder node while it waits and
+      removes it on failure. Picking the file stays with the app.
+- [ ] Links: `onLinkEdit(current) → Future<TiptapLinkEdit?>` with `href` and any attributes the app adds
+      (`data-*`), so internal links are the app's business, not a link type in the package.
+- [ ] Embeds: `onEmbedInsert() → Future<String?>` returns a URL; the bundle's extensions decide which node
+      it becomes (YouTube, iframe…), or the editor reports that none accepts it.
+- [ ] Paste: pasted HTML goes through the schema like any content; pasted images go through
+      `onImageUpload`.
+
+### 4.5 Layout and keyboard
+
+- [ ] Two layouts: the editor grows with its content inside the app's scrollable (like the view) and
+      reports the caret's rect so the app can keep it above the keyboard; or it has a fixed height and
+      scrolls itself. Measure both on real devices and pick the default.
+- [ ] iOS: focus from Dart, scrolling to the caret, the input accessory bar (hide it or replace it with
+      the Flutter toolbar). If `webview_flutter` cannot do this, a second adapter.
+- [ ] Android: IME composition (Gboard, CJK input), selection handles inside the Flutter page.
+- [ ] Undo and redo from the keyboard shortcuts and from the toolbar stay in one history.
+
+### 4.6 Toolbar building blocks
+
+- [ ] Flutter widgets bound to the controller's state: a mark toggle, a block type menu, undo / redo, a
+      link button. The app composes its own toolbar; the package ships no fixed one.
+- [ ] `TiptapExtension` can carry its own toolbar items and command names, so an app's node comes with
+      its button.
+
+### 4.7 Example and tests
+
+- [ ] The example gets an editor screen: edit, save to JSON and HTML, open the saved document in
+      `TiptapView`, the same bundle in both.
+- [ ] JS tests of the editor mode on jsdom; Dart tests of the controller with the fake session, as for
+      the view.
 
 ## 5. Extensions as packages
 

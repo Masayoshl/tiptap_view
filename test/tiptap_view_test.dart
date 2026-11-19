@@ -35,8 +35,21 @@ class FakeSession implements TiptapWebViewSession {
   void event(String name, [Map<String, Object?> payload = const {}]) =>
       post({'type': 'event', 'event': name, 'payload': payload});
 
-  void ready({int protocol = TiptapProtocol.version, List<String> extensions = const ['starterKit']}) =>
-      event('ready', {'protocol': protocol, 'bundle': 'test', 'runtimeVersion': '0.1.0', 'extensions': extensions});
+  void ready({int protocol = TiptapProtocol.version, String? mode = 'view', List<String> extensions = const ['starterKit']}) =>
+      event('ready', {
+        'protocol': protocol,
+        'bundle': 'test',
+        'runtimeVersion': '0.1.0',
+        'mode': mode,
+        'modes': const ['view'],
+        'extensions': extensions,
+      });
+
+  /// Answers to the runtime's requests, as `resolve` received them.
+  final List<Map<String, Object?>> resolved = [];
+
+  void request(String id, String name, [Map<String, Object?> payload = const {}]) =>
+      post({'type': 'request', 'id': id, 'name': name, 'payload': payload});
 
   List<String> get methods => [for (final call in calls) call['method'] as String];
 
@@ -48,6 +61,11 @@ class FakeSession implements TiptapWebViewSession {
 
   @override
   Future<void> runJavaScript(String source) async {
+    final answer = RegExp(r'resolve\((.*)\);$').firstMatch(source);
+    if (answer != null) {
+      resolved.add(jsonDecode(answer.group(1)!) as Map<String, Object?>);
+      return;
+    }
     final match = RegExp(r'receive\((.*)\);$').firstMatch(source)!;
     final call = jsonDecode(match.group(1)!) as Map<String, Object?>;
     calls.add(call);
@@ -90,6 +108,17 @@ void main() {
       expect(TiptapProtocol.parse('{"type":"event","token":"abc"}', token: 'abc'), isNull);
     });
 
+    test('parses requests and builds answers to them', () {
+      final request = TiptapProtocol.parse(
+        '{"type":"request","id":"r1","name":"pick","payload":{"a":1},"token":"abc"}',
+        token: 'abc',
+      );
+      expect(request, isA<TiptapRequestMessage>().having((m) => m.name, 'name', 'pick').having((m) => m.payload, 'payload', {'a': 1}));
+      expect(TiptapProtocol.parse('{"type":"request","id":"r1","token":"abc"}', token: 'abc'), isNull);
+      expect(TiptapProtocol.respond('r1', result: {'x': 1}), 'window.tiptapView && window.tiptapView.resolve({"id":"r1","result":{"x":1}});');
+      expect(TiptapProtocol.respond('r1', error: 'no'), 'window.tiptapView && window.tiptapView.resolve({"id":"r1","error":"no"});');
+    });
+
     test('builds a call the runtime can evaluate', () {
       expect(
         TiptapProtocol.call('1', 'setContent', {'content': "it's </script>"}),
@@ -100,6 +129,7 @@ void main() {
 
   test('the host page cannot be closed early by the bundle', () {
     final page = TiptapHostPage.build(js: 'a="</script><b>"', css: 'x{} </style>', token: 'abc');
+    expect(page, contains('"mode":"view"'), reason: 'the view starts the runtime in its view mode');
     expect('</script>'.allMatches(page).length, 2, reason: 'only the config and bundle scripts close');
     expect(page, contains(r'a="<\/script><b>"'));
     expect(page, contains(r'<\/style>'));
@@ -241,6 +271,40 @@ void main() {
       await tester.pump();
       expect(errors.single.context, 'protocol');
       expect(session.calls, isEmpty);
+    });
+
+    testWidgets('refuses a bundle that cannot start in the view mode', (tester) async {
+      final errors = <TiptapError>[];
+      final session = await pump(tester, () => TiptapView(adapter: adapter, bundle: bundle(), content: const TiptapContent.html(''), onError: errors.add));
+      session.ready(mode: null);
+      await tester.pump();
+      expect(errors.single.context, 'mode');
+      expect(session.calls, isEmpty);
+    });
+
+    testWidgets('answers extension requests, and rejects ones nobody handles', (tester) async {
+      final session = await pump(tester, () => TiptapView(
+            adapter: adapter,
+            bundle: bundle(),
+            content: const TiptapContent.html(''),
+            extensions: [
+              TiptapExtension('starterKit', requests: {
+                'pick': (payload) async => {'picked': payload['from']},
+                'fail': (_) => throw StateError('nope'),
+              }),
+            ],
+          ));
+      session.ready();
+      session.request('r1', 'pick', {'from': 'a'});
+      session.request('r2', 'fail');
+      session.request('r3', 'unknown');
+      await tester.pump();
+      // Each request is answered when its handler is done, not in the order they came.
+      expect(session.resolved, unorderedEquals([
+        {'id': 'r1', 'result': {'picked': 'a'}},
+        {'id': 'r2', 'error': 'Bad state: nope'},
+        {'id': 'r3', 'error': 'No handler for request: unknown'},
+      ]));
     });
 
     testWidgets('routes extension events to their handlers', (tester) async {

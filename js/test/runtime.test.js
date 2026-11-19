@@ -19,7 +19,7 @@ let runtime;
 let mod;
 before(async () => {
   mod = await import('../src/index.js');
-  runtime = mod.createRuntime({ name: 'test', extensions: mod.defaultExtensions(), schemaVersion: 7 });
+  runtime = mod.createRuntime({ name: 'test', extensions: mod.defaultExtensions(), viewHooks: mod.defaultViewHooks(), schemaVersion: 7 });
 });
 
 const content = () => window.document.getElementById('tv-content');
@@ -41,6 +41,8 @@ test('announces itself with the protocol, schema and extensions', () => {
   assert.equal(ready.payload.protocol, mod.PROTOCOL_VERSION);
   assert.equal(ready.payload.bundle, 'test');
   assert.equal(ready.payload.schemaVersion, 7);
+  assert.equal(ready.payload.mode, 'view');
+  assert.deepEqual(ready.payload.modes, ['view']);
   assert.ok(ready.payload.extensions.includes('starterKit'));
 });
 
@@ -143,4 +145,65 @@ test('applies only --tv-* theme variables', async () => {
   assert.equal(root.style.getPropertyValue('--tv-color-text'), '#fff');
   assert.equal(root.style.getPropertyValue('color'), '');
   assert.equal(root.dataset.brightness, 'dark');
+});
+
+test('frames other than YouTube load lazily in a box that keeps their aspect ratio', async () => {
+  await call('setContent', { format: 'html', content: '<iframe width="400" height="300" src="https://player.example/x"></iframe>' });
+  const box = content().querySelector('.tv-embed--frame');
+  assert.ok(box, 'the frame gets a box');
+  assert.equal(box.style.aspectRatio, '400 / 300');
+  assert.equal(box.querySelector('iframe').getAttribute('loading'), 'lazy');
+});
+
+test('view hooks prepare content and take taps before links do; a failing hook is reported', async () => {
+  const seen = [];
+  runtime.view.use({
+    name: 'badge',
+    prepare(root, { document }) {
+      for (const link of Array.from(root.querySelectorAll('a[data-badge]'))) {
+        const badge = document.createElement('img');
+        badge.setAttribute('src', 'badge.png');
+        badge.setAttribute('data-tv-decoration', '');
+        link.append(badge);
+      }
+    },
+    click(target, _event, { emit }) {
+      if (!target.closest('a[data-badge]')) return false;
+      seen.push(target.tagName);
+      emit('badgeTap', {});
+      return true;
+    },
+  });
+  runtime.view.use({ name: 'broken', prepare() { throw new Error('boom'); } });
+
+  await call('setContent', { format: 'html', content: '<p><a href="/x" data-badge="1">x</a><img src="a.png"></p>' });
+  assert.ok(content().querySelector('a img[data-tv-decoration]'));
+  const error = events('error').at(-1).payload;
+  assert.match(error.message, /boom/);
+  assert.match(error.context, /broken/);
+
+  const links = events('linkTap').length;
+  const click = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+  content().querySelector('a').dispatchEvent(click);
+  assert.ok(click.defaultPrevented);
+  assert.equal(events('badgeTap').length, 1);
+  assert.equal(events('linkTap').length, links, 'the hook took the tap');
+
+  assert.equal(await call('setImageHidden', { index: 1, hidden: true }), false, 'decorations are not images');
+  assert.equal(await call('setImageHidden', { index: 0, hidden: false }), true);
+});
+
+test('asks Dart with a request and waits for its answer', async () => {
+  const answer = runtime.request('pickColor', { current: 'red' });
+  const sent = messages.filter(message => message.type === 'request').at(-1);
+  assert.equal(sent.name, 'pickColor');
+  assert.deepEqual(sent.payload, { current: 'red' });
+  assert.equal(sent.token, 'secret');
+  runtime.resolve({ id: 'unknown', result: 1 });
+  runtime.resolve({ id: sent.id, result: 'blue' });
+  assert.equal(await answer, 'blue');
+
+  const failing = runtime.request('pickColor');
+  runtime.resolve({ id: messages.filter(message => message.type === 'request').at(-1).id, error: 'No handler' });
+  await assert.rejects(failing, /No handler/);
 });
