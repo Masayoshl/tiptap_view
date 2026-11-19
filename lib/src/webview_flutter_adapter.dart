@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +58,13 @@ class _WebViewFlutterSession implements TiptapWebViewSession {
       }
     }
     controller.setOverScrollMode(WebViewOverScrollMode.never);
+    // The page never scrolls (the Flutter page around it does), so a scrollbar of its own is only ever a
+    // flash before the first height arrives.
+    unawaited(controller.supportsSetScrollBarsEnabled().then((supported) async {
+      if (!supported) return;
+      await controller.setVerticalScrollBarEnabled(false);
+      await controller.setHorizontalScrollBarEnabled(false);
+    }).catchError((Object _) {}));
   }
 
   final TiptapSessionCallbacks callbacks;

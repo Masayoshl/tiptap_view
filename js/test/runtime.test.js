@@ -19,7 +19,14 @@ let runtime;
 let mod;
 before(async () => {
   mod = await import('../src/index.js');
-  runtime = mod.createRuntime({ name: 'test', extensions: mod.defaultExtensions(), viewHooks: mod.defaultViewHooks(), schemaVersion: 7 });
+  runtime = mod.createRuntime({
+    name: 'test',
+    extensions: mod.defaultExtensions(),
+    viewHooks: mod.defaultViewHooks(),
+    schemaVersion: 7,
+    // As embedify's timestamps render <button data-video-time>; script must be refused.
+    sanitize: { addTags: ['button', 'script'], addAttributes: ['aria-pressed', 'onclick'] },
+  });
 });
 
 const content = () => window.document.getElementById('tv-content');
@@ -206,4 +213,19 @@ test('asks Dart with a request and waits for its answer', async () => {
   const failing = runtime.request('pickColor');
   runtime.resolve({ id: messages.filter(message => message.type === 'request').at(-1).id, error: 'No handler' });
   await assert.rejects(failing, /No handler/);
+});
+
+test('keeps what the bundle allows, and refuses what runs code', async () => {
+  const refusal = events('error').find(event => event.payload.context === 'sanitize');
+  assert.match(refusal.payload.message, /never allows script, onclick/);
+  await call('setContent', {
+    format: 'html',
+    content: '<p>At <button data-video-time="42" aria-pressed="false" onclick="steal()">0:42</button></p><script>steal()</script>',
+  });
+  const button = content().querySelector('button');
+  assert.ok(button, 'the button stays');
+  assert.equal(button.getAttribute('data-video-time'), '42');
+  assert.equal(button.getAttribute('aria-pressed'), 'false');
+  assert.equal(button.hasAttribute('onclick'), false);
+  assert.equal(content().querySelector('script'), null);
 });

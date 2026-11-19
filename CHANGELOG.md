@@ -35,6 +35,10 @@ Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol i
 * Keyboard (roadmap 4.5): the editor keeps the caret in sight by scrolling the page around it
   (`TiptapEditor.keepCaretVisible`, `caretPadding`), from the runtime's `caret` event and while the
   keyboard comes up; the page inside the WebView no longer scrolls by itself when iOS focuses it.
+* `createRuntime({ sanitize: { addTags, addAttributes } })`: a bundle lets the view keep what its own
+  nodes render (embedify's timestamp `button`); elements that run or load code and `on*` attributes are
+  refused.
+* The loading builder stays until the first height; the WebView draws no scrollbar.
 * Android: selection handles no longer stay behind over the keyboard when the page around the editor
   scrolls (the runtime's `hideSelectionHandles`, sent on the first scroll while focused).
 * `createRuntime({ editorExtensions, normalizeContent, validateForSave })` for the editor mode.

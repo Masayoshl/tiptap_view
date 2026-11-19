@@ -307,6 +307,24 @@ void main() {
       ]));
     });
 
+    testWidgets('shows the loading builder until the content is in and measured', (tester) async {
+      final session = await pump(tester, () => TiptapView(
+            adapter: adapter,
+            bundle: bundle(),
+            content: const TiptapContent.html('<p>a</p>'),
+            loadingBuilder: (_) => const SizedBox(key: Key('loading')),
+          ));
+      expect(find.byKey(const Key('loading')), findsOneWidget);
+      session.ready();
+      await tester.pump();
+      await tester.pump();
+      expect(session.methods, contains('setContent'));
+      expect(find.byKey(const Key('loading')), findsOneWidget, reason: 'rendered, not measured yet');
+      session.event('height', {'height': 300});
+      await tester.pump();
+      expect(find.byKey(const Key('loading')), findsNothing);
+    });
+
     testWidgets('routes extension events to their handlers', (tester) async {
       final received = <Map<String, Object?>>[];
       final session = await pump(tester, () => TiptapView(

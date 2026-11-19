@@ -325,7 +325,9 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
         fit: StackFit.expand,
         children: [
           buildPage(context, gestureRecognizers: widget.gestureRecognizers),
-          if (!_opened && loading != null) Positioned.fill(child: loading(context)),
+          // Until the content is in and measured: before its first height the view is still at minHeight,
+          // showing a slice of the page.
+          if ((!_opened || pageHeight == null) && loading != null) Positioned.fill(child: loading(context)),
         ],
       ),
     );

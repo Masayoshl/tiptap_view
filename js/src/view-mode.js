@@ -17,7 +17,7 @@ import { prepareFrames } from './embeds.js';
  * `context` has `emit`, `reportHeight` and `document`. Images a hook adds that are not the document's own
  * (posters, icons) carry `data-tv-decoration`: taps on them and `setImageHidden` indexes ignore them.
  */
-export function createViewMode(core, { hooks: initialHooks = [] } = {}) {
+export function createViewMode(core, { hooks: initialHooks = [], sanitize: allowances = {} } = {}) {
   const { content, emit, reportHeight, htmlFromJson, reportError } = core;
   const hooks = [];
   const context = { emit, reportHeight, document };
@@ -43,7 +43,7 @@ export function createViewMode(core, { hooks: initialHooks = [] } = {}) {
   // Content --------------------------------------------------------------------------------------------
 
   function render(html, { sanitized = true } = {}) {
-    content.innerHTML = sanitized ? sanitize(html, window) : html;
+    content.innerHTML = sanitized ? sanitize(html, window, allowances) : html;
     for (const image of Array.from(content.querySelectorAll('img'))) {
       if (!image.hasAttribute('loading')) image.setAttribute('loading', 'lazy');
       image.addEventListener('load', reportHeight, { once: true });

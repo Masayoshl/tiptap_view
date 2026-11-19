@@ -1,6 +1,7 @@
 import { generateHTML, generateJSON, getSchema } from '@tiptap/core';
 import { createViewMode } from './view-mode.js';
 import { createEditorMode } from './editor-mode.js';
+import { sanitizeAllowances } from './sanitize.js';
 
 // Bumped whenever a message changes shape. Dart refuses a runtime that speaks another version.
 // 2: requests from the page to Dart, the `mode` in `ready`.
@@ -25,7 +26,8 @@ const MODES = { view: createViewMode, editor: createEditorMode };
  *
  * [viewHooks] add behavior to the view mode only (see view-mode.js): previews for embeds, for one.
  * [editorExtensions], [normalizeContent], [validateForSave] and [embeds] are for the editor mode (see
- * editor-mode.js).
+ * editor-mode.js). [sanitize] (`{ addTags, addAttributes }`) lets the view keep what the bundle's own nodes
+ * render and the sanitizer would remove; elements that run or load code are refused.
  */
 export function createRuntime({
   extensions,
@@ -36,6 +38,7 @@ export function createRuntime({
   normalizeContent = null,
   validateForSave = null,
   embeds = [],
+  sanitize = {},
 } = {}) {
   if (!Array.isArray(extensions) || !extensions.length) throw new Error('createRuntime needs extensions');
   const config = window.__tiptapViewConfig || {};
@@ -116,7 +119,12 @@ export function createRuntime({
   // Mode -----------------------------------------------------------------------------------------------
 
   const core = { extensions, content, emit, request, reportError, reportHeight, htmlFromJson, schemaFor, schemaVersion };
-  const options = { hooks: viewHooks, editorExtensions, normalizeContent, validateForSave, embeds };
+  // Tags and attributes the bundle's own nodes render, which the view would otherwise remove.
+  const allowances = sanitizeAllowances(sanitize);
+  if (allowances.refused.length) {
+    reportError(new Error(`The view never allows ${allowances.refused.join(', ')}; createRuntime({ sanitize }) cannot add them`), 'sanitize');
+  }
+  const options = { hooks: viewHooks, editorExtensions, normalizeContent, validateForSave, embeds, sanitize: allowances };
   const start = MODES[modeName];
   // Styles that differ by mode (tables in the editor, for one) hang off this attribute.
   if (start) document.documentElement.dataset.tvMode = modeName;

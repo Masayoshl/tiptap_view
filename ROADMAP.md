@@ -31,9 +31,13 @@ What comes after 0.1.0, roughly in order. Each stage keeps the boundaries the pa
 - [ ] Text selection and copy, accessibility (VoiceOver / TalkBack over the WebView content).
 - [ ] Wide tables: horizontal scroll inside the table box on real TipTap tables (`colgroup` widths).
 - [ ] Decide the default extension set (Highlight, Details, Subscript…) against what common editors emit.
-- [ ] Sanitizer allowances from the bundle (`createRuntime({ sanitize: { addTags, addAttributes } })`):
+- [x] Sanitizer allowances from the bundle (`createRuntime({ sanitize: { addTags, addAttributes } })`):
       an app node that renders an element the sanitizer forbids, such as embedify's
-      `button[data-video-time]` timestamps, disappears from the view today.
+      `button[data-video-time]` timestamps, stays in the view. Elements that run or load code (`script`,
+      `style`, `object`, `embed`, `base`, `meta`, `link`, `form`, `svg`…) and `on*` attributes are refused
+      with an error.
+- [x] No flash before the first height: the loading builder stays until the content is in and measured,
+      and the WebView draws no scrollbar of its own.
 - [ ] Warm a page ahead of time (a pool of one preloaded WebView) so the first document shows faster.
 
 ## 3. Sharing the schema with the web (a guide, not package code)

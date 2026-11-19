@@ -24,11 +24,35 @@ function purifier(window) {
   return purify;
 }
 
-/** Cleans [html] for showing in the view. Keeps data-* attributes, styles, details, tables and embeds. */
-export function sanitize(html, window = globalThis.window) {
+const FORBIDDEN = ['script', 'style', 'form', 'button', 'object', 'embed', 'base', 'meta', 'link'];
+
+// What no bundle may let through: elements that run code, load code or change how the page loads. Event
+// handler attributes and javascript: URLs are always removed by DOMPurify itself.
+const NEVER = new Set(['script', 'style', 'object', 'embed', 'base', 'meta', 'link', 'form', 'frame', 'frameset', 'template', 'svg', 'math']);
+
+/**
+ * Checks a bundle's allowances (`createRuntime({ sanitize })`): tags and attributes its own nodes render
+ * that the view would otherwise remove, a timestamp `button` for one. Returns the usable part, and what
+ * was refused as unsafe.
+ */
+export function sanitizeAllowances({ addTags = [], addAttributes = [] } = {}) {
+  const tags = addTags.map(tag => String(tag).toLowerCase());
+  const attributes = addAttributes.map(name => String(name).toLowerCase());
+  return {
+    addTags: tags.filter(tag => !NEVER.has(tag)),
+    addAttributes: attributes.filter(name => !name.startsWith('on')),
+    refused: [...tags.filter(tag => NEVER.has(tag)), ...attributes.filter(name => name.startsWith('on'))],
+  };
+}
+
+/**
+ * Cleans [html] for showing in the view. Keeps data-* attributes, styles, details, tables and embeds, and
+ * what [allowances] add (see [sanitizeAllowances]).
+ */
+export function sanitize(html, window = globalThis.window, { addTags = [], addAttributes = [] } = {}) {
   return purifier(window).sanitize(html, {
-    ADD_TAGS: ['iframe', 'details', 'summary'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'open', 'colspan', 'rowspan', 'colwidth', 'target'],
-    FORBID_TAGS: ['script', 'style', 'form', 'button', 'object', 'embed', 'base', 'meta', 'link'],
+    ADD_TAGS: ['iframe', 'details', 'summary', ...addTags],
+    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'open', 'colspan', 'rowspan', 'colwidth', 'target', ...addAttributes],
+    FORBID_TAGS: FORBIDDEN.filter(tag => !addTags.includes(tag)),
   });
 }
