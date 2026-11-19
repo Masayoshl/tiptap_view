@@ -405,3 +405,16 @@ test('drops the selection handles by setting the same selection again, only whil
   await new Promise(resolve => setTimeout(resolve, 10));
   if (!runtime.editor.isFocused) assert.equal(await call('hideSelectionHandles'), false);
 });
+
+test('a tap on the empty part of the view below the document puts the caret at the end', async () => {
+  await call('setContent', { format: 'json', content: doc(paragraph('Short')) });
+  runtime.editor.commands.setTextSelection(1);
+  const event = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  window.document.documentElement.dispatchEvent(event);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(event.defaultPrevented);
+  assert.equal(runtime.editor.state.selection.from, 6, 'at the end of "Short"');
+  const inside = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  content().querySelector('p').dispatchEvent(inside);
+  assert.equal(inside.defaultPrevented, false, 'taps on the text are the editor\'s own');
+});

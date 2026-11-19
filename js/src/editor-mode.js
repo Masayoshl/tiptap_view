@@ -332,6 +332,16 @@ export function createEditorMode(core, { editorExtensions = [], normalizeContent
     return Array.isArray(args) ? args : [args];
   }
 
+  // The view is often taller than the document (the widget's minHeight, a short page): a tap on the empty
+  // part below it puts the caret at the end, as a tap under the last line of a text field does.
+  document.addEventListener('mousedown', event => {
+    if (!editor || !editor.isEditable) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('.ProseMirror')) return;
+    event.preventDefault();
+    editor.commands.focus('end');
+  });
+
   // The editor places the caret on a tap; a link opens only through an action of the app, which hears of
   // the tap (to show a bubble with the link, for one).
   document.addEventListener('click', event => {

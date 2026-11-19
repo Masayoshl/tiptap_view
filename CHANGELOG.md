@@ -39,6 +39,8 @@ Groundwork for the editor (roadmap 4.1). Bundles must be rebuilt: the protocol i
   nodes render (embedify's timestamp `button`); elements that run or load code and `on*` attributes are
   refused.
 * The loading builder stays until the first height; the WebView draws no scrollbar.
+* A tap on the empty part of the editor below the document puts the caret at the end (a short or empty
+  document no longer leaves most of the editor untappable).
 * Android: selection handles no longer stay behind over the keyboard when the page around the editor
   scrolls (the runtime's `hideSelectionHandles`, sent on the first scroll while focused).
 * `createRuntime({ editorExtensions, normalizeContent, validateForSave })` for the editor mode.
