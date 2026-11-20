@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 * `TiptapEditor.focusShowsKeyboard` (roadmap 4.5, on by default): focusing the editor from code
   (`TiptapEditorController.focus`, a command that focuses it, a toolbar button) brings the iOS keyboard up, as

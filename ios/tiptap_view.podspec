@@ -1,7 +1,7 @@
 # For apps that still use CocoaPods; Swift Package Manager reads ios/tiptap_view/Package.swift instead.
 Pod::Spec.new do |s|
   s.name             = 'tiptap_view'
-  s.version          = '0.3.0'
+  s.version          = '0.4.0'
   s.summary          = 'Shows and edits TipTap documents in Flutter through a WebView.'
   s.homepage         = 'https://github.com/Masayoshl/tiptap_view'
   s.license          = { :file => '../LICENSE' }
