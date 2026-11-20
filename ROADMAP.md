@@ -194,6 +194,10 @@ only for what starts in the page (a paste, a tap).
       toolbar. `showKeyboardAccessory: false` hides it, through a small iOS plugin (Swift Package Manager,
       a podspec too) that replaces the `inputAccessoryView` getter of WebKit's `WKContentView`. A private
       class: the plugin does nothing when it is gone.
+- [x] iOS: focusing the editor from code (a toolbar button) moved the caret and left the keyboard down; WebKit
+      shows it only for a focus the user started in the page. `focusShowsKeyboard` (on by default) has the
+      plugin tell `WKContentView`'s `_elementDidFocus:userIsInteracting:…` the user is interacting. A private
+      method: the plugin does nothing when it is gone. Checked on the iOS 26 simulator.
 - [x] Android: Gboard composition works. Selection handles are drawn by the WebView in a window of their
       own at a fixed place on screen and stayed behind, over the keyboard, when the page scrolled; the
       editor now drops them on the first scroll of the page while it has focus.

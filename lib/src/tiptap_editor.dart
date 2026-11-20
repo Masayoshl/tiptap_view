@@ -53,6 +53,7 @@ class TiptapEditor extends StatefulWidget {
     this.keepCaretVisible = true,
     this.caretPadding = 24,
     this.showKeyboardAccessory = true,
+    this.focusShowsKeyboard = true,
   });
 
   final TiptapContent content;
@@ -121,6 +122,12 @@ class TiptapEditor extends StatefulWidget {
   /// Hiding it needs the plugin part of this package, which is on iOS only; elsewhere this does nothing.
   final bool showKeyboardAccessory;
 
+  /// Whether focusing the editor from code (`TiptapEditorController.focus`, a command that focuses it)
+  /// brings the keyboard up on iOS, as a tap in the text does. WebKit otherwise shows the keyboard only for
+  /// a focus the user started in the page, so a toolbar button that focuses the editor moved the caret and
+  /// left the keyboard down. Needs the plugin part of this package, which is on iOS only.
+  final bool focusShowsKeyboard;
+
   @override
   State<TiptapEditor> createState() => _TiptapEditorState();
 }
@@ -138,6 +145,17 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _syncKeyboardAccessory();
+    _syncKeyboardFocus();
+  }
+
+  /// Whether this editor has asked for focus from code to bring the keyboard up.
+  bool _holdingFocus = false;
+
+  void _syncKeyboardFocus() {
+    final want = widget.focusShowsKeyboard && defaultTargetPlatform == TargetPlatform.iOS;
+    if (want == _holdingFocus) return;
+    _holdingFocus = want;
+    unawaited(want ? TiptapKeyboardFocus.hold() : TiptapKeyboardFocus.release());
   }
 
   /// Whether this editor has asked for the keyboard's bar to be hidden.
@@ -153,6 +171,7 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   @override
   void dispose() {
     if (_hidingAccessory) unawaited(TiptapKeyboardAccessory.release());
+    if (_holdingFocus) unawaited(TiptapKeyboardFocus.release());
     WidgetsBinding.instance.removeObserver(this);
     _scrollPosition?.removeListener(_pageScrolled);
     _handlesTimer?.cancel();
@@ -294,6 +313,7 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   void didUpdateWidget(TiptapEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncKeyboardAccessory();
+    _syncKeyboardFocus();
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.detach();
       if (pageReadyInfo != null) widget.controller?.attach(callPage);

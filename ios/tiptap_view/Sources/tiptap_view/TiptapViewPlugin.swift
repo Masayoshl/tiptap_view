@@ -2,14 +2,22 @@ import Flutter
 import ObjectiveC
 import UIKit
 
-/// The one native thing `tiptap_view` needs: letting the app hide the bar iOS puts above the keyboard of a
-/// WebView (the arrows and Done). `webview_flutter` has no API for it, and the bar belongs to WebKit's
-/// private `WKContentView`, so the plugin replaces that view's `inputAccessoryView` getter with one that
-/// answers `nil` while the app asks for the bar to be hidden. Nothing else of the view changes. When WebKit
-/// has no such class or method (a future iOS), the plugin does nothing and says so to Dart.
+/// The native things `tiptap_view` needs from WebKit's private `WKContentView`, which `webview_flutter` has no
+/// API for:
+///
+/// - hiding the bar iOS puts above the keyboard of a WebView (the arrows and Done): the view's
+///   `inputAccessoryView` getter answers `nil` while the app asks for the bar to be hidden;
+/// - bringing the keyboard up when the editor is focused from code (`TiptapEditorController.focus`, a
+///   toolbar button): WebKit shows it only for a focus the user started with a tap in the page, so the view's
+///   `_elementDidFocus:userIsInteracting:…` is told the user is interacting while the app asks for it.
+///
+/// Nothing else of the view changes. When WebKit has no such class or method (a future iOS), the plugin
+/// does nothing and says so to Dart.
 public class TiptapViewPlugin: NSObject, FlutterPlugin {
   private static var hidden = false
   private static var installed = false
+  private static var focusShowsKeyboard = false
+  private static var focusInstalled = false
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "tiptap_view/keyboard_accessory", binaryMessenger: registrar.messenger())
@@ -24,6 +32,12 @@ public class TiptapViewPlugin: NSObject, FlutterPlugin {
         return
       }
       result(TiptapViewPlugin.setAccessoryHidden(hidden))
+    case "setFocusShowsKeyboard":
+      guard let value = call.arguments as? Bool else {
+        result(FlutterError(code: "bad-arguments", message: "A bool is expected", details: nil))
+        return
+      }
+      result(TiptapViewPlugin.setFocusShowsKeyboard(value))
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -71,5 +85,46 @@ public class TiptapViewPlugin: NSObject, FlutterPlugin {
     class_replaceMethod(target, selector, imp_implementationWithBlock(replacement), types)
     installed = true
     return true
+  }
+
+  /// Returns whether the keyboard can be brought up from code on this iOS.
+  private static func setFocusShowsKeyboard(_ value: Bool) -> Bool {
+    guard installFocusIfNeeded() else { return false }
+    focusShowsKeyboard = value
+    return true
+  }
+
+  private static func installFocusIfNeeded() -> Bool {
+    if focusInstalled { return true }
+    guard let target = NSClassFromString("WKContentView") else { return false }
+
+    // iOS 13 and later.
+    let current = NSSelectorFromString("_elementDidFocus:userIsInteracting:blurPreviousNode:activityStateChanges:userObject:")
+    if let method = class_getInstanceMethod(target, current), let types = method_getTypeEncoding(method) {
+      typealias Focus = @convention(c) (AnyObject, Selector, UnsafeRawPointer?, Bool, Bool, UInt, AnyObject?) -> Void
+      let original = unsafeBitCast(method_getImplementation(method), to: Focus.self)
+      let replacement: @convention(block) (AnyObject, UnsafeRawPointer?, Bool, Bool, UInt, AnyObject?) -> Void = {
+        view, element, interacting, blurPrevious, activityChanges, userObject in
+        original(view, current, element, interacting || focusShowsKeyboard, blurPrevious, activityChanges, userObject)
+      }
+      class_replaceMethod(target, current, imp_implementationWithBlock(replacement), types)
+      focusInstalled = true
+      return true
+    }
+
+    // iOS 12.2.
+    let older = NSSelectorFromString("_elementDidFocus:userIsInteracting:blurPreviousNode:changingActivityState:userObject:")
+    if let method = class_getInstanceMethod(target, older), let types = method_getTypeEncoding(method) {
+      typealias Focus = @convention(c) (AnyObject, Selector, UnsafeRawPointer?, Bool, Bool, Bool, AnyObject?) -> Void
+      let original = unsafeBitCast(method_getImplementation(method), to: Focus.self)
+      let replacement: @convention(block) (AnyObject, UnsafeRawPointer?, Bool, Bool, Bool, AnyObject?) -> Void = {
+        view, element, interacting, blurPrevious, changingState, userObject in
+        original(view, older, element, interacting || focusShowsKeyboard, blurPrevious, changingState, userObject)
+      }
+      class_replaceMethod(target, older, imp_implementationWithBlock(replacement), types)
+      focusInstalled = true
+      return true
+    }
+    return false
   }
 }

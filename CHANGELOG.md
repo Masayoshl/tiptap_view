@@ -1,3 +1,10 @@
+## Unreleased
+
+* `TiptapEditor.focusShowsKeyboard` (roadmap 4.5, on by default): focusing the editor from code
+  (`TiptapEditorController.focus`, a command that focuses it, a toolbar button) brings the iOS keyboard up, as
+  a tap in the text does. WebKit showed it only for a focus the user started in the page. The iOS plugin tells
+  `WKContentView`'s `_elementDidFocus:userIsInteracting:…` the user is interacting while an editor wants it.
+
 ## 0.3.0
 
 * `TiptapEditor.showKeyboardAccessory` (roadmap 4.5): `false` hides the bar iOS shows above the keyboard

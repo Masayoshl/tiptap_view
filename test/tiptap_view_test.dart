@@ -714,12 +714,14 @@ void main() {
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final asked = <bool>[];
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      // The channel also carries focusShowsKeyboard, which every editor asks for here; only the bar counts.
       messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), (call) async {
-        asked.add(call.arguments as bool);
+        if (call.method == 'setAccessoryHidden') asked.add(call.arguments as bool);
         return true;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), null));
       TiptapKeyboardAccessory.reset();
+      TiptapKeyboardFocus.reset();
 
       Widget editor({required bool bar, bool present = true}) => DefaultAssetBundle(
         bundle: FakeAssets(),
@@ -742,6 +744,44 @@ void main() {
       await tester.pumpWidget(editor(bar: false));
       await tester.pumpWidget(editor(bar: false, present: false));
       expect(asked, [true, false, true, false], reason: 'removing the editor gives the bar back');
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('on iOS, an editor asks for focus from code to bring the keyboard up while it is shown', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final asked = <bool>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), (call) async {
+        if (call.method == 'setFocusShowsKeyboard') asked.add(call.arguments as bool);
+        return true;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), null));
+      TiptapKeyboardAccessory.reset();
+      TiptapKeyboardFocus.reset();
+
+      Widget editor({bool focusShowsKeyboard = true, bool present = true}) => DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: present
+                ? TiptapEditor(
+                    adapter: adapter,
+                    bundle: bundle(),
+                    content: const TiptapContent.html(''),
+                    focusShowsKeyboard: focusShowsKeyboard)
+                : const SizedBox(),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(editor());
+      expect(asked, [true], reason: 'on by default');
+      await tester.pumpWidget(editor(focusShowsKeyboard: false));
+      expect(asked, [true, false]);
+      await tester.pumpWidget(editor());
+      await tester.pumpWidget(editor(present: false));
+      expect(asked, [true, false, true, false], reason: 'removing the editor turns it off');
       debugDefaultTargetPlatformOverride = null;
     });
 
