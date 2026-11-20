@@ -2,7 +2,7 @@ name: tiptap_view
 description: >-
   Shows and edits TipTap documents (HTML or TipTap JSON) in Flutter through a WebView, with the same schema
   and extensions as the web editor.
-version: 0.2.0
+version: 0.3.0
 publish_to: none
 
 environment:

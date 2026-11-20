@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 * `TiptapEditor.showKeyboardAccessory` (roadmap 4.5): `false` hides the bar iOS shows above the keyboard
   (arrows and Done), for apps with their own toolbar. The package is now also an iOS plugin for it
