@@ -22,6 +22,7 @@ class _EditorPageState extends State<EditorPage> {
   int _version = 0;
   int _uploads = 0;
   bool _failNextUpload = false;
+  bool _keyboardAccessory = true;
   TiptapIncompatibleContent? _refused;
 
   @override
@@ -117,6 +118,12 @@ class _EditorPageState extends State<EditorPage> {
         title: Text('Editor · v$_version'),
         actions: [
           IconButton(
+            key: const Key('keyboard-accessory'),
+            tooltip: _keyboardAccessory ? 'Hide the keyboard bar (iOS)' : 'Show the keyboard bar (iOS)',
+            icon: Icon(_keyboardAccessory ? Icons.keyboard : Icons.keyboard_hide_outlined),
+            onPressed: () => setState(() => _keyboardAccessory = !_keyboardAccessory),
+          ),
+          IconButton(
             key: const Key('fail-next'),
             tooltip: 'Fail the next upload',
             icon: Icon(_failNextUpload ? Icons.cloud_off : Icons.cloud_outlined),
@@ -164,6 +171,7 @@ class _EditorPageState extends State<EditorPage> {
                   content: widget.content,
                   controller: _controller,
                   minHeight: 240,
+                  showKeyboardAccessory: _keyboardAccessory,
                   loadingBuilder: (_) => const Center(child: CircularProgressIndicator()),
                   onReady: (info) => _write('ready: ${info.bundle}, mode ${info.mode}'),
                   onOpened: () => _write('opened'),

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tiptap_view/src/host_page.dart';
+import 'package:tiptap_view/src/keyboard_accessory.dart';
 import 'package:tiptap_view/tiptap_view.dart';
 
 /// Stands in for the WebView: records what the view sends and lets a test post messages as the runtime.
@@ -706,6 +707,66 @@ void main() {
       await tester.pumpAndSettle();
       final caretOnScreen = 500 - scroll.offset;
       expect(caretOnScreen, inInclusiveRange(0, 300 - 20), reason: 'the caret is above the keyboard');
+    });
+
+    testWidgets('on iOS, an editor without the keyboard bar hides it, and brings it back when it goes', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final asked = <bool>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), (call) async {
+        asked.add(call.arguments as bool);
+        return true;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), null));
+      TiptapKeyboardAccessory.reset();
+
+      Widget editor({required bool bar, bool present = true}) => DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: present
+                ? TiptapEditor(
+                    adapter: adapter, bundle: bundle(), content: const TiptapContent.html(''), showKeyboardAccessory: bar)
+                : const SizedBox(),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(editor(bar: true));
+      expect(asked, isEmpty, reason: 'the bar is shown by default, nothing to ask');
+      await tester.pumpWidget(editor(bar: false));
+      expect(asked, [true]);
+      await tester.pumpWidget(editor(bar: true));
+      expect(asked, [true, false]);
+      await tester.pumpWidget(editor(bar: false));
+      await tester.pumpWidget(editor(bar: false, present: false));
+      expect(asked, [true, false, true, false], reason: 'removing the editor gives the bar back');
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('off iOS the keyboard bar flag asks for nothing', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var asked = 0;
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), (call) async {
+        asked++;
+        return true;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('tiptap_view/keyboard_accessory'), null));
+      TiptapKeyboardAccessory.reset();
+      await tester.pumpWidget(DefaultAssetBundle(
+        bundle: FakeAssets(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: TiptapEditor(
+                adapter: adapter, bundle: bundle(), content: const TiptapContent.html(''), showKeyboardAccessory: false),
+          ),
+        ),
+      ));
+      expect(asked, 0);
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('on Android, a scroll of the page drops the selection handles once, while focused', (tester) async {

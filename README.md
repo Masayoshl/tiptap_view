@@ -52,6 +52,14 @@ dependencies:
       ref: v0.2.0
 ```
 
+### iOS: the bar above the keyboard
+
+iOS puts its own bar (arrows and Done) above the keyboard of a WebView. An app with its own toolbar can hide
+it: `TiptapEditor(showKeyboardAccessory: false)`. `webview_flutter` has no API for this, so the package has a
+small iOS plugin (Swift Package Manager, and a podspec for CocoaPods) that answers `nil` for the bar of
+WebKit's `WKContentView` while an editor asks for it hidden. It relies on a private WebKit class: if a future
+iOS drops it, the bar simply stays. On Android and elsewhere the flag does nothing.
+
 ## How it fits together
 
 - **`js/`**: the runtime that runs in the page: the bridge to Dart, sanitizing, link and image taps,

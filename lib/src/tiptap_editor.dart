@@ -12,6 +12,7 @@ import 'content.dart';
 import 'controller.dart';
 import 'events.dart';
 import 'extension.dart';
+import 'keyboard_accessory.dart';
 import 'page_host.dart';
 import 'theme.dart';
 import 'tiptap_view.dart';
@@ -51,6 +52,7 @@ class TiptapEditor extends StatefulWidget {
     this.gestureRecognizers,
     this.keepCaretVisible = true,
     this.caretPadding = 24,
+    this.showKeyboardAccessory = true,
   });
 
   final TiptapContent content;
@@ -114,6 +116,11 @@ class TiptapEditor extends StatefulWidget {
   /// Room kept above and below the caret when the page scrolls to it, in logical pixels.
   final double caretPadding;
 
+  /// Whether iOS shows its bar above the keyboard (the arrows and Done). An app with its own toolbar over
+  /// the keyboard sets this to false: the bar takes about 50 points and offers nothing the editor needs.
+  /// Hiding it needs the plugin part of this package, which is on iOS only; elsewhere this does nothing.
+  final bool showKeyboardAccessory;
+
   @override
   State<TiptapEditor> createState() => _TiptapEditorState();
 }
@@ -130,10 +137,22 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _syncKeyboardAccessory();
+  }
+
+  /// Whether this editor has asked for the keyboard's bar to be hidden.
+  bool _hidingAccessory = false;
+
+  void _syncKeyboardAccessory() {
+    final wantHidden = !widget.showKeyboardAccessory && defaultTargetPlatform == TargetPlatform.iOS;
+    if (wantHidden == _hidingAccessory) return;
+    _hidingAccessory = wantHidden;
+    unawaited(wantHidden ? TiptapKeyboardAccessory.hide() : TiptapKeyboardAccessory.release());
   }
 
   @override
   void dispose() {
+    if (_hidingAccessory) unawaited(TiptapKeyboardAccessory.release());
     WidgetsBinding.instance.removeObserver(this);
     _scrollPosition?.removeListener(_pageScrolled);
     _handlesTimer?.cancel();
@@ -274,6 +293,7 @@ class _TiptapEditorState extends State<TiptapEditor> with TiptapPageHost<TiptapE
   @override
   void didUpdateWidget(TiptapEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncKeyboardAccessory();
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.detach();
       if (pageReadyInfo != null) widget.controller?.attach(callPage);

@@ -1,3 +1,9 @@
+## Unreleased
+
+* `TiptapEditor.showKeyboardAccessory` (roadmap 4.5): `false` hides the bar iOS shows above the keyboard
+  (arrows and Done), for apps with their own toolbar. The package is now also an iOS plugin for it
+  (`ios/tiptap_view`, Swift Package Manager, plus a podspec); Android is unchanged.
+
 ## 0.2.0
 
 The editor: `TiptapEditor` next to `TiptapView`, on the same bundle. Bundles must be rebuilt: the protocol

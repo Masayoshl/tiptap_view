@@ -190,9 +190,10 @@ only for what starts in the page (a paste, a tap).
       the document out of reach of any drag. Any page scroll is undone at once.
 - [ ] A fixed-height layout that scrolls itself, for apps that want the editor as a pane; measure it
       against the growing one on real devices.
-- [ ] iOS: the input accessory bar above the keyboard (arrows, Done) takes ~50pt and duplicates the app's
-      toolbar: hide it or replace it with the Flutter toolbar. `webview_flutter` has no API for it, so
-      this likely needs native code (a second adapter or a small plugin).
+- [x] iOS: the input accessory bar above the keyboard (arrows, Done) takes ~50pt and duplicates the app's
+      toolbar. `showKeyboardAccessory: false` hides it, through a small iOS plugin (Swift Package Manager,
+      a podspec too) that replaces the `inputAccessoryView` getter of WebKit's `WKContentView`. A private
+      class: the plugin does nothing when it is gone.
 - [x] Android: Gboard composition works. Selection handles are drawn by the WebView in a window of their
       own at a fixed place on screen and stayed behind, over the keyboard, when the page scrolled; the
       editor now drops them on the first scroll of the page while it has focus.
